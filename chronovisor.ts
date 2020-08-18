@@ -1,6 +1,34 @@
 /**
- * Series of classes for importing json and csv files
- * and converting them to Chronovis formmated jsons
+ * @summary Series of classes for importing json and csv files and converting them to Chronovis formmated jsons
+ * @author Tommy Sharkey
+ * @contact tsharkey@ucsd.edu
+ * 
+ * Classes (contained in namespace Chronovisor):
+ *      Chrono: an object that has all of the chronovis data. Can be exported as csv or json
+ *      Map: object representing a mapping from an arbitrary csv/json to a Chrono object. Contains info like: column 3 of foo.csv corresponds to Chrono.start
+ *      Json: object used for importing an arbitrary json. Creates the UI used for forming a Map from the Json
+ *      Csv: object used for importing an arbitrary csv. Creates the UI used for forming a Map from the Csv.
+ *      Tag: unused. Supposed to represent chronovis tags
+ * 
+ * Additional functions:
+ *      addFile: handles the drag and drop of a meta file into the 'offset timestamps by' div. calls readMetaFile
+ *      allowDrop: allows use of addFile
+ *      convert: function calls on objects to map a chosen file to a list of Chronos, and then downloads them to the chosen format (csv or json)
+ *      download: helper function for downloading text files
+ *      getUuid: helper function for generating unique ids for the exported Chronovis Json files
+ *      loadMap: if the user loads a custom map json file, this function handles the parsing of it. Calls on Map object to update the HTML to reflect properties in the created Map
+ *      onImport: handles import of a data file (json/csv). Calls on Csv and Json classes to setup the UI for mapping this data to Chrono objects
+ *      onLoad: sets up some initial params
+ *      readMetaFile: reads a meta file and sets the global timestamp offset (used when timestamps aren't relative to the start of the video)
+ *      updateSeparator: eventListener for when user updates the separator character used for parsing csv files
+ * 
+ * Global Variables:
+ *      data: list of imported data (csvs and jsons) extracted from files.
+ *      errors: list of errors and warnings raised during the export process. Used for developers only.
+ *      files: list of imported files' names. Indecies are the same as data
+ *      fileTemplate: instantiated in onLoad. a copy of the main upload body. Can be duplicated to allow for multiple files to be uploaded
+ *      maps: list of maps from imported data to chrono objects (indecies are the same as data)
+ *      timeOffset: amount to offset all timestamps by. This is useful if timestamps are absolute / aren't relative to the start of the video
  */
 
 namespace Chronovisor {
@@ -348,6 +376,87 @@ namespace Chronovisor {
             );
         }
 
+        private applyCsvDomElm(item, name:string, mapSelections, fileIndex) {
+            if (item !== null && item !== undefined) { 
+                if (typeof (item) === "string") {
+                    console.log("Setting Static", name);
+                    (document.getElementsByClassName("chronovisor-static-"+name)[fileIndex] as HTMLInputElement).value = item;
+                } else {
+                    console.log("Setting", name, "to", item, "on", mapSelections[item]);
+                    mapSelections[item].value = name;
+                }
+            }
+        }
+
+        /**
+         * Uses the data from this map to set DOM elements
+         * @param fileIndex the index of elements to apply the map to
+         */
+        public applyMapToDom(fileIndex: number) {
+            console.log("Applying map to DOM");
+            let table = document.getElementsByClassName("chronovisor-selector")[fileIndex].getElementsByTagName("table")[0];
+            let items = {"type":this.type, "key":this.key, "title":this.title, "description":this.description, "start":this.start, "end":this.end, "tags":this.tags};
+            let keys = Object.keys(items);
+            console.log(table, items, keys);
+
+            // Erase static fields
+            for (let k in keys) {
+                (document.getElementsByClassName("chronovisor-static-"+keys[k])[fileIndex] as HTMLInputElement).value = "";
+            }
+
+            // CSV
+            if (table.classList.contains("csv")) {
+                console.log("Is CSV");
+                let mapSelections = table.rows[0].getElementsByTagName("select");
+                console.log("Map Selections", mapSelections);
+                // Set all to 'ignore' to start
+                for (let s in mapSelections) {
+                    mapSelections[s].value = 'ignore';
+                }
+                for (let k in keys) {
+                    console.log("Setting", keys[k], "to", items[keys[k]], "targetting", mapSelections[items[keys[k]]]);
+                    this.applyCsvDomElm(items[keys[k]], keys[k], mapSelections, fileIndex);
+                }
+
+                // update table
+                CSV.displayCsv(data[fileIndex].slice(0,4), fileIndex, this.sep);
+            }
+            // JSON
+            else {
+                console.log("Is JSON");
+                for (let i=0; i<keys.length; i++) {
+                    let row = table.rows[i+1];
+                    console.log("Setting", keys[i], "to", items[keys[i]], "on elm", row.cells[0].getElementsByTagName("select")[0]);
+                    row.cells[0].getElementsByTagName("select")[0].value = keys[i];
+                    let addProp = row.cells[1].getElementsByTagName("button")[0];
+                    if (items[keys[i]]) {
+                        if (typeof(items[keys[i]]) === "string") {
+                            console.log("Setting static");
+                            (document.getElementsByClassName("chronovisor-static-"+keys[i])[fileIndex] as HTMLInputElement).value = items[keys[i]];
+                        }
+                        else {
+                            console.log("Setting dynamic")
+                            for (let j=0; j<items[keys[i]].length; j++) {
+                                addProp.click();
+                                row.cells[j+2].getElementsByTagName("input")[0].value = items[keys[i]][j];
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // firstRow
+            let fr = document.getElementsByClassName("chronovisor-selector-firstrow")[fileIndex] as HTMLInputElement;
+            fr.checked = this.firstRow;
+            // timestampFormat
+            let time = document.getElementsByClassName("chronovisor-timestamp-format")[fileIndex] as HTMLInputElement;
+            time.value = this.timestampFormat;
+            // sep
+            let sep = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex].getElementsByTagName("input")[0] as HTMLInputElement;
+            sep.value = this.sep;
+            console.debug("First Row", fr.checked, this.firstRow, "\nTimestamp", time.value, this.timestampFormat, "\nSeparator", sep.value, this.sep);
+        }
+
         public static getMapFromDOM(fileIndex: number | Node): Map {
             console.log("Getting map with file index", fileIndex);
             if (typeof (fileIndex) !== "number") {
@@ -399,7 +508,7 @@ namespace Chronovisor {
             // Check static properties
             let opts = ["type", "title", "description", "start", "end", "tags"];
             for (let i = 0; i < opts.length; i++) {
-                let opt = document.getElementsByClassName("chronovisor-static-" + opts[i])[fileIndex];
+                let opt = document.getElementsByClassName("chronovisor-static-" + opts[i])[fileIndex] as HTMLInputElement;
                 let val = opt.value;
                 if (val !== "") {
                     map[opts[i]] = val;
@@ -407,8 +516,8 @@ namespace Chronovisor {
             }
 
             // Get extras
-            map.firstRow = document.getElementsByClassName("chronovisor-selector-firstrow")[fileIndex].checked;
-            map.timestampFormat = document.getElementsByClassName("chronovisor-timestamp-format")[fileIndex].value;
+            map.firstRow = (document.getElementsByClassName("chronovisor-selector-firstrow")[fileIndex] as HTMLInputElement).checked;
+            map.timestampFormat = (document.getElementsByClassName("chronovisor-timestamp-format")[fileIndex] as HTMLInputElement).value;
             map.sep = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex].getElementsByTagName("input")[0].value;
 
             return map;
@@ -495,7 +604,7 @@ namespace Chronovisor {
 
             // Create rows and populate them with json data
             Json.showSamples(fileIndex, 0, 5);
-            Json.createSelection(fileIndex, table);
+            Json.createSelection(fileIndex);
 
             document.getElementsByClassName("chronovisor-selector")[fileIndex].appendChild(table);
         }
@@ -599,13 +708,13 @@ namespace Chronovisor {
             Json.addRowButton(table);
         }
 
-        private static addRowButton(table: Node) {
+        private static addRowButton(table: HTMLTableElement) {
             let row = table.insertRow(-1);
             let cell = row.insertCell(0);
             let button = document.createElement("button");
             button.innerHTML = "add row";
             button.onclick = Json.addRow;
-            cell.style.columnSpan = -1;
+            cell.style.columnSpan = "-1";
             cell.appendChild(button);
         }
     }
@@ -669,10 +778,13 @@ function onImport(input) {
             data[fileIndex] = contents.split(/[\r\n]+/g);
             og_data[fileIndex] = data[fileIndex];
 
-            let separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex]
+            let separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex] as HTMLInputElement
             separatorContainer.style.visibility = "visible";
-            let separator = separatorContainer.getElementsByTagName("input")[0].value;
+            let separator = maps[fileIndex]? maps[fileIndex].sep : separatorContainer.getElementsByTagName("input")[0].value;
             Chronovisor.CSV.displayCsv(data[fileIndex].slice(0, 4), fileIndex, separator);
+            if (maps[fileIndex]) {
+                maps[fileIndex].applyMapToDom(fileIndex);
+            }
         }
     } else if (file.name.indexOf(".json") !== -1) {
         reader.onload = function (ev) {
@@ -680,10 +792,13 @@ function onImport(input) {
             data[fileIndex] = JSON.parse(contents);
             og_data[fileIndex] = data[fileIndex];
 
-            let separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex]
+            let separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex] as HTMLInputElement
             separatorContainer.style.visibility = "hidden";
 
             Chronovisor.Json.displayJson(data[fileIndex].slice(0, 4), fileIndex);
+            if (maps[fileIndex]) {
+                maps[fileIndex].applyMapToDom(fileIndex);
+            }
         }
     } else {
         console.error("Invalid file type", file.name);
@@ -714,8 +829,8 @@ function updateSeparator(ev) {
  */
 function convert() {
     // get time offset
-    timeOffset = document.getElementById("chronovisor-time-offset").value;
-    let timeOffsetFormat = document.getElementById("chronovisor-time-offset-format").value;
+    timeOffset = (document.getElementById("chronovisor-time-offset") as HTMLInputElement).value;
+    let timeOffsetFormat = (document.getElementById("chronovisor-time-offset-format") as HTMLSelectElement).value;
     timeOffset = Chronovisor.Map.convertTimestamp(timeOffset, timeOffsetFormat);
 
     let chronos = []
@@ -731,7 +846,7 @@ function convert() {
         }
     }
 
-    let downloadType = document.getElementById("chronovisor-save-format").value;
+    let downloadType = (document.getElementById("chronovisor-save-format") as HTMLSelectElement).value;
     console.log("Download type set to", downloadType);
     if (downloadType === "json") {
         let jsonchronos = Chronovisor.Chrono.Jsonify(chronos);
@@ -775,6 +890,7 @@ function loadMap(input) {
     reader.onload = function (ev) {
         let contents = JSON.parse(ev.target.result.toString());
         maps[fileIndex] = Chronovisor.Map.import(contents);
+        if (files[fileIndex]) maps[fileIndex].applyMapToDom(fileIndex);
     }
 
     reader.readAsText(file);
@@ -815,7 +931,7 @@ function readMetaFile(ev) {
     reader.onload = function (ev) {
         let contents = JSON.parse(ev.target.result.toString());
         let property = window.prompt(JSON.stringify(contents, null, 4), "startTimePropertyName");
-        document.getElementById("chronovisor-time-offset").value = contents[property];
+        (document.getElementById("chronovisor-time-offset") as HTMLInputElement).value = contents[property];
     }
 
     reader.readAsText(file);
