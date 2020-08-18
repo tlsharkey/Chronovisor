@@ -551,7 +551,7 @@ var Chronovisor;
             }
             for (var i = endIndex - 1; i >= startIndex; i--) {
                 var cell = table.rows[0].insertCell(0);
-                var span = document.createElement("div");
+                var span = document.createElement("pre");
                 span.innerHTML = JSON.stringify(data[fileIndex][i], null, 4);
                 cell.appendChild(span);
             }

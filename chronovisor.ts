@@ -634,7 +634,7 @@ namespace Chronovisor {
             }
             for (let i = endIndex - 1; i >= startIndex; i--) {
                 let cell = table.rows[0].insertCell(0);
-                let span = document.createElement("div");
+                let span = document.createElement("pre");
                 span.innerHTML = JSON.stringify(data[fileIndex][i], null, 4);
                 cell.appendChild(span);
             }
