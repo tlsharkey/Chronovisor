@@ -28,6 +28,7 @@
  *      files: list of imported files' names. Indecies are the same as data
  *      fileTemplate: instantiated in onLoad. a copy of the main upload body. Can be duplicated to allow for multiple files to be uploaded
  *      maps: list of maps from imported data to chrono objects (indecies are the same as data)
+ *      sampleDataSize: tuple of the sample size to make for csv and json table displays
  *      timeOffset: amount to offset all timestamps by. This is useful if timestamps are absolute / aren't relative to the start of the video
  */
 var Chronovisor;
@@ -330,43 +331,51 @@ var Chronovisor;
         Map.prototype.applyMapToDom = function (fileIndex) {
             console.log("Applying map to DOM");
             var table = document.getElementsByClassName("chronovisor-selector")[fileIndex].getElementsByTagName("table")[0];
-            var items = { "type": this.type, "key": this.key, "title": this.title, "description": this.description, "start": this.start, "end": this.end, "tags": this.tags };
+            var items = { "type": this.type, "title": this.title, "description": this.description, "start": this.start, "end": this.end, "tags": this.tags };
             var keys = Object.keys(items);
             console.log(table, items, keys);
             // Erase static fields
             for (var k in keys) {
                 document.getElementsByClassName("chronovisor-static-" + keys[k])[fileIndex].value = "";
             }
+            // Set static only field 'key'
+            document.getElementsByClassName("chronovisor-static-key")[fileIndex].value = this.key ? this.key : "";
             // CSV
             if (table.classList.contains("csv")) {
-                console.log("Is CSV");
                 var mapSelections = table.rows[0].getElementsByTagName("select");
-                console.log("Map Selections", mapSelections);
                 // Set all to 'ignore' to start
                 for (var s in mapSelections) {
                     mapSelections[s].value = 'ignore';
                 }
                 for (var k in keys) {
-                    console.log("Setting", keys[k], "to", items[keys[k]], "targetting", mapSelections[items[keys[k]]]);
                     this.applyCsvDomElm(items[keys[k]], keys[k], mapSelections, fileIndex);
                 }
                 // update table
-                CSV.displayCsv(data[fileIndex].slice(0, 4), fileIndex, this.sep);
+                var csv = data[fileIndex].slice(sampleDataSize[0], sampleDataSize[1]);
+                for (var i = 0; i < csv.length; i++) {
+                    var elms = csv[i].split(this.sep);
+                    for (var j = 0; j < elms.length; j++) {
+                        table.rows[i + 1].cells[j].innerHTML = elms[j];
+                    }
+                }
             }
             // JSON
             else {
-                console.log("Is JSON");
                 for (var i = 0; i < keys.length; i++) {
                     var row = table.rows[i + 1];
+                    // Set <select> element
                     console.log("Setting", keys[i], "to", items[keys[i]], "on elm", row.cells[0].getElementsByTagName("select")[0]);
                     row.cells[0].getElementsByTagName("select")[0].value = keys[i];
+                    // Set selected properties
                     var addProp = row.cells[1].getElementsByTagName("button")[0];
                     if (items[keys[i]]) {
-                        if (typeof (items[keys[i]]) === "string") {
+                        if (typeof (items[keys[i]]) === "string" || keys[i] === "key") {
+                            // Set Static
                             console.log("Setting static");
                             document.getElementsByClassName("chronovisor-static-" + keys[i])[fileIndex].value = items[keys[i]];
                         }
                         else {
+                            // Set Dynamic
                             console.log("Setting dynamic");
                             for (var j = 0; j < items[keys[i]].length; j++) {
                                 addProp.click();
@@ -524,7 +533,7 @@ var Chronovisor;
             table.classList.add("json");
             container.appendChild(table);
             // Create rows and populate them with json data
-            Json.showSamples(fileIndex, 0, 5);
+            Json.showSamples(fileIndex, sampleDataSize[0], sampleDataSize[1]);
             Json.createSelection(fileIndex);
             document.getElementsByClassName("chronovisor-selector")[fileIndex].appendChild(table);
         };
@@ -640,6 +649,7 @@ var maps = [null];
 var fileTemplate;
 var timeOffset;
 var errors = [];
+var sampleDataSize = [0, 4];
 function onLoad() {
     fileTemplate = document.getElementsByClassName("chronovisor-converter-template")[0];
 }
@@ -675,7 +685,7 @@ function onImport(input) {
             var separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex];
             separatorContainer.style.visibility = "visible";
             var separator = maps[fileIndex] ? maps[fileIndex].sep : separatorContainer.getElementsByTagName("input")[0].value;
-            Chronovisor.CSV.displayCsv(data[fileIndex].slice(0, 4), fileIndex, separator);
+            Chronovisor.CSV.displayCsv(data[fileIndex].slice(sampleDataSize[0], sampleDataSize[1]), fileIndex, separator);
             if (maps[fileIndex]) {
                 maps[fileIndex].applyMapToDom(fileIndex);
             }
@@ -688,7 +698,7 @@ function onImport(input) {
             og_data[fileIndex] = data[fileIndex];
             var separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex];
             separatorContainer.style.visibility = "hidden";
-            Chronovisor.Json.displayJson(data[fileIndex].slice(0, 4), fileIndex);
+            Chronovisor.Json.displayJson(data[fileIndex].slice(sampleDataSize[0], sampleDataSize[1]), fileIndex);
             if (maps[fileIndex]) {
                 maps[fileIndex].applyMapToDom(fileIndex);
             }
@@ -713,7 +723,7 @@ function updateSeparator(ev) {
         }
     }
     var separator = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex].getElementsByTagName("input")[0].value;
-    Chronovisor.CSV.displayCsv(data.slice(0, 4), fileIndex, separator);
+    Chronovisor.CSV.displayCsv(data.slice(sampleDataSize[0], sampleDataSize[1]), fileIndex, separator);
 }
 /**
  * Converts csv/json to chronovis json.
