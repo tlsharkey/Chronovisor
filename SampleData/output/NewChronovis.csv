@@ -1,0 +1,3 @@
+Title,Description,Start(HMS),Start(sec),End(HMS),End(sec),Duration(sec),PrimaryTag,Tags
+Point Example,Point annotation w/ 2 tags,0:15,15,0:15,15,0,Tag 1,undefinedTag 1 | Tag 2 | 
+Duration Example,Duration annotation w/ 1 tag,0:42,42,1:42,102,60,Tag 3,undefinedTag 3 | 
