@@ -1,0 +1,99 @@
+<html>
+
+<head>
+    <meta charset="utf-8">
+</head>
+
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="./chronovisor.js"></script>
+
+<body onload="onLoad()">
+    <div ondrop="readMetaFile(event)" ondragover="allowDrop(event);" style="width:100%; height:4em; background:lightgrey;">
+        <label>Offset timestamps by </label>
+        <input id="chronovisor-time-offset" type=number >
+        <select id="chronovisor-time-offset-format">
+            <option value="pythonic">Unix epoch (python)</option>
+            <option value="C">0001/01/01 00:00:00.000 (C#)</option>
+        </select>
+    </div>
+
+
+    <div id="chronovisor-converter-container">
+        <div class="chronovisor-converter-template">
+            <h1>Convert file</h1>
+            <label>Load data file: </label>
+            <input type="file" class="chronovisor-input-file" onchange="onImport(this)" accept=".csv,.json"></input>
+            <br>
+            <label>Load existing map file: </label>
+            <input type="file" class="chronovisor-map-file" onchange="loadMap(this)" accept=".json"></input>
+
+            <div class="chronovisor-csv-sep" style="visibility: hidden;">
+                <label>Split on </label><input type="text" value="," onchange="updateSeparator(this)">
+            </div class="chronovisor-csv-sep">
+            <br><br>
+
+            <h3>Dynamic properties</h3>
+            <div class="chronovisor-selector">
+                <!-- Table is generated here -->
+            </div>
+            <h3>Static properties</h3>
+            <div>
+                <table>
+                    <tr>
+                        <td>
+                            <label>type</label>
+                            <input type="text" class="chronovisor-static-type">
+                        </td>
+                        <td>
+                            <label>key</label>
+                            <input type="text" class="chronovisor-static-key">
+                        </td>
+                        <td>
+                            <label>title</label>
+                            <input type="text" class="chronovisor-static-title">
+                        </td>
+                        <td>
+                            <label>description</label>
+                            <input type="text" class="chronovisor-static-description">
+                        </td>
+                        <td>
+                            <label>start</label>
+                            <input type="text" class="chronovisor-static-start">
+                        </td>
+                        <td>
+                            <label>end</label>
+                            <input type="text" class="chronovisor-static-end">
+                        </td>
+                        <td>
+                            <label>tags</label>
+                            <input type="text" class="chronovisor-static-tags">
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <br><br>
+
+            <div>
+                <input type="checkbox" class="chronovisor-selector-firstrow"><label>Ignore first row/element</label>
+                <br>
+                <label>Timestamp format: </label>
+                <select class="chronovisor-timestamp-format">
+                    <option value="pythonic">Unix epoch (python)</option>
+                    <option value="C">0001/01/01 00:00:00.000 (C#)</option>
+                </select class="chronovisor-timestamp-format">
+                <br><br>
+                <button class="chronovisor-save-mapping" onclick="Chronovisor.Map.getMapFromDOM(this).export()">Save mapping</button>
+            </div>
+            <br><br>
+        </div>
+    </div>
+
+    <button onclick="addFile()">Add Another File</button>
+
+    <button onclick="convert()">Convert All</button>
+
+
+</body>
+
+</html>

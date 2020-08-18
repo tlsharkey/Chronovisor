@@ -1,0 +1,13 @@
+{
+    "mapName": "PenEvents",
+    "type": ["msg", "type"],
+    "key": null,
+    "title": ["msg", "state"],
+    "description": "Pen Events",
+    "start": ["timestamp"],
+    "end": null,
+    "tags": null,
+    "firstRow": false,
+    "timestampFormat": "C",
+    "sep": ";"
+}

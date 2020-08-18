@@ -1,0 +1,13 @@
+{
+    "mapName": "StaticAnnotations",
+    "type": "annotation",
+    "key": null,
+    "title": 1,
+    "description": 5,
+    "start": 0,
+    "end": null,
+    "tags": null,
+    "firstRow": true,
+    "timestampFormat": "C",
+    "sep": ";"
+}

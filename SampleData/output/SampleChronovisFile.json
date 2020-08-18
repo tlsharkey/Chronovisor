@@ -1,0 +1,73 @@
+{
+    "15Point ExampleNaN": {
+        "type": "annot",
+        "key": "15Point ExampleNaN",
+        "title": "Point Example",
+        "description": "Point annotation w/ 2 tags",
+        "start": {
+            "minute": 0,
+            "second": 15,
+            "startTime": "0:15",
+            "totalSec": 15
+        },
+        "end": {
+            "minute": 0,
+            "second": 15,
+            "endTime": "0:15",
+            "totalSec": 15
+        },
+        "duration": 0,
+        "myAnnotTags": {
+            "1": {
+                "type": "tag",
+                "tagKey": 1,
+                "shortcut": null,
+                "color": "blue",
+                "title": "Tag 1",
+                "description": "",
+                "subtags": null
+            },
+            "2": {
+                "type": "tag",
+                "tagKey": 2,
+                "shortcut": null,
+                "color": "red",
+                "title": "Tag 2",
+                "description": "",
+                "subtags": null
+            }
+        },
+        "myPrimaryTagKey": "1"
+    },
+    "42Duration ExampleNaN": {
+        "type": "annot",
+        "key": "42Duration ExampleNaN",
+        "title": "Duration Example",
+        "description": "Duration annotation w/ 1 tag",
+        "start": {
+            "minute": 0,
+            "second": 42,
+            "startTime": "0:42",
+            "totalSec": 42
+        },
+        "end": {
+            "minute": 1,
+            "second": 42,
+            "endTime": "1:42",
+            "totalSec": 102
+        },
+        "duration": 60,
+        "myAnnotTags": {
+            "3": {
+                "type": "tag",
+                "tagKey": 3,
+                "shortcut": null,
+                "color": "green",
+                "title": "Tag 3",
+                "description": "",
+                "subtags": null
+            }
+        },
+        "myPrimaryTagKey": "3"
+    }
+}
