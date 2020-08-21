@@ -5,11 +5,21 @@
 </head>
 
 <script src="./chronovisor.js"></script>
+<style>
+    .chronovisor-post-pair {
+        background-color: antiquewhite;
+        margin:1em;
+    }
 
-<body onload="onLoad()">
-    <div ondrop="readMetaFile(event)" ondragover="allowDrop(event);" style="width:100%; height:4em; background:lightgrey;">
+    .chronovisor-post-pair table {
+        border-style:solid;
+    }
+</style>
+
+<body onload="Chronovisor.onLoad()">
+    <div ondrop="Chronovisor.readMetaFile(event)" ondragover="Chronovisor.allowDrop(event);" style="width:100%; height:4em; background:lightgrey;">
         <label>Offset timestamps by </label>
-        <input id="chronovisor-time-offset" type=number >
+        <input id="chronovisor-time-offset" type=number onchange="Chronovisor.autoSetFormat(event, 'chronovisor-time-offset-format')">
         <select id="chronovisor-time-offset-format">
             <option value="pythonic">Unix epoch (python)</option>
             <option value="C">0001/01/01 00:00:00.000 (C#)</option>
@@ -26,13 +36,13 @@
         <div class="chronovisor-converter-template">
             <h1>Convert file</h1>
             <label>Load data file: </label>
-            <input type="file" class="chronovisor-input-file" onchange="onImport(this)" accept=".csv,.json"></input>
+            <input type="file" class="chronovisor-input-file" onchange="Chronovisor.onImport(this)" accept=".csv,.json"></input>
             <br>
             <label>Load existing map file: </label>
-            <input type="file" class="chronovisor-map-file" onchange="loadMap(this)" accept=".json"></input>
+            <input type="file" class="chronovisor-map-file" onchange="Chronovisor.loadMap(this)" accept=".json"></input>
 
             <div class="chronovisor-csv-sep" style="visibility: hidden;">
-                <label>Split on </label><input type="text" value="," onchange="updateSeparator(this)">
+                <label>Split on </label><input type="text" value="," onchange="Chronovisor.updateSeparator(this)">
             </div class="chronovisor-csv-sep">
             <br>
 
@@ -92,9 +102,64 @@
         </div>
     </div>
 
-    <button onclick="addFile()">Add Another File</button>
+    <button onclick="Chronovisor.addFile()">Add Another File</button>
 
-    <button onclick="convert()">Convert All</button>
+    <button onclick="Chronovisor.convert()">Convert All</button>
+
+
+    <div id="chronovisor-post">
+        <h1>Post Processing</h1>
+        <button onclick="document.getElementById('chronovisor-post-ui').style.display='block'; Chronovisor.PostProcessing_CreatePair();">Start</button>
+
+        <div id="chronovisor-post-ui" style="display: none;">
+            <div id="chronovisor-post-pairings">
+            <!-- Commented region showing the structure of the generated tables.
+            <div class="chronovisor-post-pair">
+                <table class="chronovisor-post-start">
+                    <thead><h3>Start Matches pattern</h3></thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <select>
+                                    <option value="type">type</option>
+                                    <option value="title">title</option>
+                                    <option value="tags">tags</option>
+                                    <option value="description">description</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="text" value="speech starts">
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <table class="chronovisor-post-end">
+                    <thead><h3>End Matches pattern</h3></thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <select>
+                                    <option value="type">type</option>
+                                    <option value="title">title</option>
+                                    <option value="tags">tags</option>
+                                    <option value="description">description</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="text" value="speech ends">
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+             -->
+            </div>
+             <button onclick="Chronovisor.PostProcessing_CreatePair();">Add another pair</button>
+             <br>
+             <button onclick="Chronovisor.PostProcessing_Process()">Process</button>
+        </div>
+    </div>
 
 
 </body>

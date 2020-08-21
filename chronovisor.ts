@@ -33,7 +33,141 @@
  */
 
 namespace Chronovisor {
+    enum flags {
+        IS_SAME_AS,
+    }
+
+    export class ChronoSet {
+        private chronos: Chrono[];
+        
+        public static Jsonify(chronos: Chrono[]): object {
+            let json = {};
+            let keys = {};
+
+            for (let i = 0; i < chronos.length; i++) {
+                let key;
+                if (chronos[i].key) {
+                    // check if in keys
+                    if (chronos[i].key in keys) {
+                        keys[chronos[i].key] += 1;
+                    } else {
+                        keys[chronos[i].key] = 0;
+                    }
+                    key = keys[chronos[i].key].toString() + chronos[i].key
+                } else {
+                    key = getUuid();
+                }
+
+                chronos[i].key = key;
+                json[key] = chronos[i].toJson();
+            }
+
+            return json;
+        }
+
+        public static Csvify(chronos: Chrono[], useOldFormat: boolean = false): string {
+            let csv;
+
+            if (useOldFormat) {
+                // Set headers
+                csv = ["StartTime,EndTime,Title,Annotation,MainCategory,Category2,Category3"];
+                // Get data
+                for (let i = 0; i < chronos.length; i++) {
+                    csv.push(chronos[i].toOldCsv());
+                }
+            } else {
+                csv = ["Title,Description,Start(HMS),Start(sec),End(HMS),End(sec),Duration(sec),PrimaryTag,Tags"];
+                for (let i = 0; i < chronos.length; i++) {
+                    csv.push(chronos[i].toCsv());
+                }
+            }
+
+            return csv.join("\r\n");
+        }
+
+        /**
+         * Replaces found start and end pairs with a single element using the start timestamp and end timestamp.
+         * Will combine data from start and end - using start's values where overlaps exist
+         * @param chronos The Chrono objects to find pairs in
+         * @param startKey the identifiers to use to find the start element eg: {"type": "speech starts", "description": "person A"}
+         * @param endKey the identifiers to use to find the end element. Use the Chronovisor.flags.IS_SAME_AS flag to match with the startKey eg: {"type": "speech stops", "description": flags.IS_SAME_AS}
+         * @returns full chronos array with individual start's and end's replaced by consolidated pairs.
+         */
+        public static FindSuccessivePairs(chronos: Chrono[], startKey: {}, endKey: {}, returnAll:boolean=false) : Chrono[] {
+
+            function getIndecies(A: any[], B: any[]): number[] {
+                return A.map(a => {
+                    for (let i=0; i<B.length; i++) {
+                        if (B[i] === a) {
+                            return i;
+                        }
+                    }
+                    return -1;
+                });
+            }
+            let indeciesToPop: number[] = [];
+
+            // Get all elements matching the start keys
+            let starts: Chrono[] = chronos;
+            for (let key in startKey) {
+                starts = starts.filter(c => c[key] === startKey[key])
+            }
+            indeciesToPop = getIndecies(starts, chronos);
+
+            // Get all elements matching the end keys
+            let ends: Chrono[] = chronos;
+            for (let key in endKey) {
+                let value = endKey[key] === flags.IS_SAME_AS? startKey[key] : endKey[key];
+                ends = ends.filter(c => c[key] === value);
+            }
+            indeciesToPop = indeciesToPop.concat(getIndecies(ends, chronos));
+
+            // Form pairs
+            let pairs = starts;
+            for (let start of pairs) {
+                let index = chronos.indexOf(start);
+
+                // Make sure the end comes after the start
+                let end;
+                let i=0
+                for (; i<ends.length; i++) {
+                    if (i === 0 || chronos.indexOf(end) <= index) {
+                        end = ends[i];
+                    }
+                    else {
+                        // remove end from ends list so other starts don't pair with it.
+                        ends.splice(i-1, 1);
+                        break;
+                    }
+                }
+
+                // Set Properties - prefer start's properties over end's
+                start.type = start.type? start.type : end.type;
+                start.key = start.key? start.key : end.key;
+                start.title = start.title? start.title : end.title;
+                start.description = start.description? start.description : end.description;
+                start.end = /*i === ends.length? null:*/ end.start;
+                start.duration = start.end - start.start;
+                start.tags = start.tags + end.tags; // combine tags
+                start.myPrimaryTagKey = start.myPrimaryTagKey? start.myPrimaryTagKey: end.myPrimaryTagKey;
+            }
+
+            // remove starts and ends from chronos
+            indeciesToPop = indeciesToPop.sort((a, b) => b-a);
+            for (let i of indeciesToPop) {
+                chronos.splice(i, 1);
+            }
+
+            // Return results
+            if (returnAll)
+                return chronos.concat(pairs);
+            else
+                return pairs;
+        }
+    }
+
     export class Chrono {
+
         type: string;
         key: string;
         title: string;
@@ -110,7 +244,6 @@ namespace Chronovisor {
             }
             let s = this.start ? new Date(this.start) : null;
             let e = this.end ? new Date(this.end) : null;
-            console.log("DATES", s, e);
             let csv = [
                 this.title ? this.title.replace(sep, (sep === "," ? ";" : ",")) : "",
                 this.description ? this.description.replace(sep, (sep === "," ? ";" : ",")) : "",
@@ -150,52 +283,6 @@ namespace Chronovisor {
             ]
             return csv.join(sep);
         }
-
-        public static Jsonify(chronos: Chrono[]): object {
-            let json = {};
-            let keys = {};
-
-            for (let i = 0; i < chronos.length; i++) {
-                let key;
-                if (chronos[i].key) {
-                    // check if in keys
-                    if (chronos[i].key in keys) {
-                        keys[chronos[i].key] += 1;
-                    } else {
-                        keys[chronos[i].key] = 0;
-                    }
-                    key = keys[chronos[i].key].toString() + chronos[i].key
-                } else {
-                    key = getUuid();
-                }
-
-                chronos[i].key = key;
-                json[key] = chronos[i].toJson();
-            }
-
-            return json;
-        }
-
-        public static Csvify(chronos: Chrono[], useOldFormat: boolean = false): string {
-            let csv;
-
-            if (useOldFormat) {
-                // Set headers
-                csv = ["StartTime,EndTime,Title,Annotation,MainCategory,Category2,Category3"];
-                // Get data
-                for (let i = 0; i < chronos.length; i++) {
-                    csv.push(chronos[i].toOldCsv());
-                }
-            } else {
-                csv = ["Title,Description,Start(HMS),Start(sec),End(HMS),End(sec),Duration(sec),PrimaryTag,Tags"];
-                for (let i = 0; i < chronos.length; i++) {
-                    csv.push(chronos[i].toCsv());
-                }
-            }
-
-            return csv.join("\r\n");
-        }
-
     }
 
     export class Tag {
@@ -380,10 +467,8 @@ namespace Chronovisor {
         private applyCsvDomElm(item, name:string, mapSelections, fileIndex) {
             if (item !== null && item !== undefined) { 
                 if (typeof (item) === "string") {
-                    console.log("Setting Static", name);
                     (document.getElementsByClassName("chronovisor-static-"+name)[fileIndex] as HTMLInputElement).value = item;
                 } else {
-                    console.log("Setting", name, "to", item, "on", mapSelections[item]);
                     mapSelections[item].value = name;
                 }
             }
@@ -394,11 +479,9 @@ namespace Chronovisor {
          * @param fileIndex the index of elements to apply the map to
          */
         public applyMapToDom(fileIndex: number) {
-            console.log("Applying map to DOM");
             let table = document.getElementsByClassName("chronovisor-selector")[fileIndex].getElementsByTagName("table")[0];
             let items = {"type":this.type, "title":this.title, "description":this.description, "start":this.start, "end":this.end, "tags":this.tags};
             let keys = Object.keys(items);
-            console.log(table, items, keys);
 
             // Erase static fields
             for (let k in keys) {
@@ -434,19 +517,16 @@ namespace Chronovisor {
                 for (let i=0; i<keys.length; i++) {
                     let row = table.rows[i+1];
                     // Set <select> element
-                    console.log("Setting", keys[i], "to", items[keys[i]], "on elm", row.cells[0].getElementsByTagName("select")[0]);
                     row.cells[0].getElementsByTagName("select")[0].value = keys[i];
                     // Set selected properties
                     let addProp = row.cells[1].getElementsByTagName("button")[0];
                     if (items[keys[i]]) {
                         if (typeof(items[keys[i]]) === "string" || keys[i] === "key") { 
                             // Set Static
-                            console.log("Setting static");
                             (document.getElementsByClassName("chronovisor-static-"+keys[i])[fileIndex] as HTMLInputElement).value = items[keys[i]];
                         }
                         else { 
                             // Set Dynamic
-                            console.log("Setting dynamic")
                             for (let j=0; j<items[keys[i]].length; j++) {
                                 addProp.click();
                                 row.cells[j+2].getElementsByTagName("input")[0].value = items[keys[i]][j];
@@ -469,13 +549,11 @@ namespace Chronovisor {
         }
 
         public static getMapFromDOM(fileIndex: number | Node): Map {
-            console.log("Getting map with file index", fileIndex);
             if (typeof (fileIndex) !== "number") {
                 let saveButtons = document.getElementsByClassName("chronovisor-save-mapping");
                 for (let i = 0; i < saveButtons.length; i++) {
                     if (saveButtons[i] === fileIndex) {
                         fileIndex = i;
-                        console.log("file index set to", i);
                     }
                 }
             }
@@ -499,7 +577,6 @@ namespace Chronovisor {
             else {
                 for (let i = 0; i < table.rows.length; i++) {
                     let row = table.rows[i];
-                    console.log(row);
                     if (row.cells[0].getElementsByTagName("select").length > 0) {
                         let mapto = row.cells[0].getElementsByTagName("select")[0].value;
                         let accessors = [];
@@ -729,252 +806,420 @@ namespace Chronovisor {
             cell.appendChild(button);
         }
     }
-}
 
 
 
 
+    //#region Post Processing UI
+    /**
+     * Event Handlers and HTML generator functions
+     */
 
-
-
-/* 
-==========================
-        MAIN
-========================== 
-*/
-
-var data = [null];
-var og_data = [null];
-var files = [null];
-var maps = [null];
-var fileTemplate
-var timeOffset;
-var errors = [];
-var sampleDataSize: [number, number] = [0, 4];
-
-function onLoad() {
-    fileTemplate = document.getElementsByClassName("chronovisor-converter-template")[0];
-}
-
-/**
- * Handles import of csv or json data to be converted to chronovis format
- * @param input event data from <input>'s onchange callback
- */
-function onImport(input) {
-    let inputFields = document.getElementsByClassName("chronovisor-input-file");
-    let fileIndex = 0;
-    for (let i = 0; i < inputFields.length; i++) {
-        if (inputFields[i] === input) {
-            fileIndex = i;
-            console.debug("File index set to", i)
-            break;
+     /**
+      * Creates a selection dropdown menu for selecting filters for pairing elements
+      */
+    export function PostProcessing_createSelection() {
+        let opts = ["type", "title", "description", /*"start", "end", */"tags"/*, "key"*/];
+        
+        let sel = document.createElement("select");
+        for (let opt of opts) {
+            let optElm = document.createElement("option");
+            optElm.value = opt;
+            optElm.innerHTML = opt;
+            sel.appendChild(optElm);
         }
+
+        return sel;
     }
 
+    /**
+     * Creates a selection drop down to select which Chrono property to use
+     * And an input element that allows for a particular property value to be selected
+     * @param row the table row to add the selection element and input element
+     */
+    export function PostProcessing_CreateFilterRow(row: HTMLTableRowElement) {
+        row.innerHTML = "";
 
-    let file: File = input.files[0];
-    if (!file) {
-        return;
+        row.insertCell(0);
+        row.cells[0].appendChild(PostProcessing_createSelection())
+
+        row.insertCell(1);
+        let input = document.createElement("input");
+        input.type = "text";
+        input.value = "filter value";
+        row.cells[1].appendChild(input);
+
+        row.insertCell(2);
+        let rm = document.createElement("button");
+        rm.innerHTML = "-";
+        rm.onclick = PostProcessing_RemoveFilter;
+        row.cells[2].appendChild(rm);
     }
-    files[fileIndex] = input.files[0].name;
 
-    // Setup reader
-    let reader = new FileReader();
-    reader.onerror = function () {
-        console.error("Failed to parse file");
+    export function PostProcessing_AddAddFilterButton(row: HTMLTableRowElement) {
+        let button = document.createElement("button");
+        button.onclick = PostProcessing_AddFilterRow;
+        button.innerHTML = "Add another filter";
+        row.innerHTML = "";
+        row.insertCell(0);
+        row.cells[0].appendChild(button)
     }
 
-    if (file.name.indexOf(".csv") !== -1) {
-        reader.onload = function (ev) {
-            let contents = ev.target.result.toString();
-            data[fileIndex] = contents.split(/[\r\n]+/g);
-            og_data[fileIndex] = data[fileIndex];
+    export function PostProcessing_AddFilterRow(ev) {
+        let rowIndex = (ev.target.parentElement.parentElement as HTMLTableRowElement).rowIndex;
+        let table = ev.target.parentElement.parentElement.parentElement.parentElement as HTMLTableElement;
+        // Add row
+        PostProcessing_CreateFilterRow(table.rows[rowIndex]);
 
-            let separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex] as HTMLInputElement
-            separatorContainer.style.visibility = "visible";
-            let separator = maps[fileIndex]? maps[fileIndex].sep : separatorContainer.getElementsByTagName("input")[0].value;
-            Chronovisor.CSV.displayCsv(data[fileIndex].slice(sampleDataSize[0], sampleDataSize[1]), fileIndex, separator);
-            if (maps[fileIndex]) {
-                maps[fileIndex].applyMapToDom(fileIndex);
+        // Add button for adding more
+        PostProcessing_AddAddFilterButton(table.insertRow(-1))
+    }
+
+    export function PostProcessing_RemoveFilter(ev) {
+        let rowIndex = (ev.target.parentElement.parentElement as HTMLTableRowElement).rowIndex;
+        let table = (ev.target.parentElement.parentElement.parentElement.parentElement as HTMLTableElement);
+        table.deleteRow(rowIndex);
+    }
+
+    export function PostProcessing_Process() {
+
+        // Get data from HTML
+        let pairs = [];
+        for (let pair of document.getElementsByClassName("chronovisor-post-pair")) {
+            let startFilter = {};
+            let endFilter = {}
+
+            // Get start
+            let startTable = document.getElementsByClassName("chronovisor-post-start")[0] as HTMLTableElement;
+            for (let row of startTable.rows) {
+                if (row.cells[0] && row.cells[0].getElementsByTagName("select").length > 0)
+                    startFilter[(row.getElementsByTagName("select")[0] as HTMLSelectElement).value] = (row.getElementsByTagName("input")[0] as HTMLInputElement).value;
+            }
+
+            // Get end
+            let endTable = document.getElementsByClassName("chronovisor-post-end")[0] as HTMLTableElement;
+            for (let row of endTable.rows) {
+                if (row.cells[0] && row.cells[0].getElementsByTagName("select").length > 0)
+                    endFilter[(row.getElementsByTagName("select")[0] as HTMLSelectElement).value] = (row.getElementsByTagName("input")[0] as HTMLInputElement).value;
+            }
+
+            pairs.push({
+                "start": startFilter,
+                "end": endFilter
+            })
+        }
+
+
+        // Process data
+        let chronos = convert("postProcessing");
+        for (let pair of pairs) {
+            chronos = ChronoSet.FindSuccessivePairs(chronos, pair.start, pair.end, true);
+        }
+        console.debug(chronos);
+    }
+
+    export function PostProcessing_CreatePair() {
+        let container = document.getElementById("chronovisor-post-pairings");
+        let pair = document.createElement("div");
+        pair.classList.add("chronovisor-post-pair");
+        container.appendChild(pair);
+
+        // Create tables
+        let start = document.createElement("table");
+        let end = document.createElement("table");
+        pair.appendChild(start);
+        pair.appendChild(end);
+
+        // Setup tables
+        // start
+        start.classList.add("chronovisor-post-start");
+        start.createTHead().innerHTML = "<h3>Start elements match pattern</h3>";
+        start.createTBody();
+        start.insertRow(0);
+        PostProcessing_CreateFilterRow(start.insertRow(0));
+        PostProcessing_AddAddFilterButton(start.insertRow(1));
+        // end
+        end.classList.add("chronovisor-post-end");
+        end.createTHead().innerHTML = "<h3>End elements match pattern</h3>";
+        end.createTBody();
+        end.insertRow(0);
+        PostProcessing_CreateFilterRow(end.insertRow(0));
+        PostProcessing_AddAddFilterButton(end.insertRow(1));
+
+        // Create remove button
+        let rm = document.createElement("button");
+        rm.innerHTML = "remove pair";
+        rm.onclick = this.PostProcessing_RemovePair;
+        pair.appendChild(rm);
+    }
+
+    export function PostProcessing_RemovePair(ev) {
+        ev.target.parentElement.parentElement.removeChild(ev.target.parentElement);
+    }
+    //#endregion
+
+
+
+
+
+
+
+
+    /* 
+    ==========================
+            MAIN
+    ========================== 
+    */
+
+    var data = [null];
+    var og_data = [null];
+    var files = [null];
+    var maps = [null];
+    var fileTemplate
+    var timeOffset;
+    var errors = [];
+    var sampleDataSize: [number, number] = [0, 4];
+
+    export function onLoad() {
+        fileTemplate = document.getElementsByClassName("chronovisor-converter-template")[0];
+    }
+
+    /**
+     * Handles import of csv or json data to be converted to chronovis format
+     * @param input event data from <input>'s onchange callback
+     */
+    export function onImport(input) {
+        let inputFields = document.getElementsByClassName("chronovisor-input-file");
+        let fileIndex = 0;
+        for (let i = 0; i < inputFields.length; i++) {
+            if (inputFields[i] === input) {
+                fileIndex = i;
+                console.debug("File index set to", i)
+                break;
             }
         }
-    } else if (file.name.indexOf(".json") !== -1) {
-        reader.onload = function (ev) {
-            let contents = ev.target.result.toString();
-            data[fileIndex] = JSON.parse(contents);
-            og_data[fileIndex] = data[fileIndex];
 
-            let separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex] as HTMLInputElement
-            separatorContainer.style.visibility = "hidden";
 
-            Chronovisor.Json.displayJson(data[fileIndex].slice(sampleDataSize[0], sampleDataSize[1]), fileIndex);
-            if (maps[fileIndex]) {
-                maps[fileIndex].applyMapToDom(fileIndex);
+        let file: File = input.files[0];
+        if (!file) {
+            return;
+        }
+        files[fileIndex] = input.files[0].name;
+
+        // Setup reader
+        let reader = new FileReader();
+        reader.onerror = function () {
+            console.error("Failed to parse file");
+        }
+
+        if (file.name.indexOf(".csv") !== -1) {
+            reader.onload = function (ev) {
+                let contents = ev.target.result.toString();
+                data[fileIndex] = contents.split(/[\r\n]+/g);
+                og_data[fileIndex] = data[fileIndex];
+
+                let separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex] as HTMLInputElement
+                separatorContainer.style.visibility = "visible";
+                let separator = maps[fileIndex]? maps[fileIndex].sep : separatorContainer.getElementsByTagName("input")[0].value;
+                Chronovisor.CSV.displayCsv(data[fileIndex].slice(sampleDataSize[0], sampleDataSize[1]), fileIndex, separator);
+                if (maps[fileIndex]) {
+                    maps[fileIndex].applyMapToDom(fileIndex);
+                }
             }
-        }
-    } else {
-        console.error("Invalid file type", file.name);
-    }
+        } else if (file.name.indexOf(".json") !== -1) {
+            reader.onload = function (ev) {
+                let contents = ev.target.result.toString();
+                data[fileIndex] = JSON.parse(contents);
+                og_data[fileIndex] = data[fileIndex];
 
-    reader.readAsText(file);
-}
+                let separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex] as HTMLInputElement
+                separatorContainer.style.visibility = "hidden";
 
-/**
- * Updates the display of data when the csv separator character is changed
- */
-function updateSeparator(ev) {
-    let fileIndex = 0;
-    let sepFields = document.getElementsByClassName("chronovisor-csv-sep");
-    for (let i = 0; i < sepFields.length; i++) {
-        if (sepFields[i] === ev.parentNode) {
-            fileIndex = i;
-            console.debug("Sep field index set to", i);
-            break;
-        }
-    }
-    let separator = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex].getElementsByTagName("input")[0].value;
-    Chronovisor.CSV.displayCsv(data.slice(sampleDataSize[0], sampleDataSize[1]), fileIndex, separator);
-}
-
-/**
- * Converts csv/json to chronovis json.
- */
-function convert() {
-    // get time offset
-    timeOffset = (document.getElementById("chronovisor-time-offset") as HTMLInputElement).value;
-    let timeOffsetFormat = (document.getElementById("chronovisor-time-offset-format") as HTMLSelectElement).value;
-    timeOffset = Chronovisor.Map.convertTimestamp(timeOffset, timeOffsetFormat);
-
-    let chronos = []
-    for (let i = 0; i < data.length; i++) {
-        if (maps[i] === null) {
-            maps[i] = Chronovisor.Map.getMapFromDOM(i);
-        }
-
-        if (files[i].indexOf(".csv") !== -1) {
-            chronos = chronos.concat(maps[i].convertCsv(data[i]));
+                Chronovisor.Json.displayJson(data[fileIndex].slice(sampleDataSize[0], sampleDataSize[1]), fileIndex);
+                if (maps[fileIndex]) {
+                    maps[fileIndex].applyMapToDom(fileIndex);
+                }
+            }
         } else {
-            chronos = chronos.concat(maps[i].convertJson(data[i]));
+            console.error("Invalid file type", file.name);
+        }
+
+        reader.readAsText(file);
+    }
+
+    /**
+     * Updates the display of data when the csv separator character is changed
+     */
+    export function updateSeparator(ev) {
+        let fileIndex = 0;
+        let sepFields = document.getElementsByClassName("chronovisor-csv-sep");
+        for (let i = 0; i < sepFields.length; i++) {
+            if (sepFields[i] === ev.parentNode) {
+                fileIndex = i;
+                console.debug("Sep field index set to", i);
+                break;
+            }
+        }
+        let separator = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex].getElementsByTagName("input")[0].value;
+        Chronovisor.CSV.displayCsv(data.slice(sampleDataSize[0], sampleDataSize[1]), fileIndex, separator);
+    }
+
+    /**
+     * Converts csv/json to chronovis json.
+     */
+    export function convert(downloadType:string =null) {
+        // get time offset
+        timeOffset = (document.getElementById("chronovisor-time-offset") as HTMLInputElement).value;
+        let timeOffsetFormat = (document.getElementById("chronovisor-time-offset-format") as HTMLSelectElement).value;
+        timeOffset = Chronovisor.Map.convertTimestamp(timeOffset, timeOffsetFormat);
+
+        let chronos = []
+        for (let i = 0; i < data.length; i++) {
+            if (maps[i] === null) {
+                maps[i] = Chronovisor.Map.getMapFromDOM(i);
+            }
+
+            if (files[i].indexOf(".csv") !== -1) {
+                chronos = chronos.concat(maps[i].convertCsv(data[i]));
+            } else {
+                chronos = chronos.concat(maps[i].convertJson(data[i]));
+            }
+        }
+
+        downloadType = downloadType? downloadType: (document.getElementById("chronovisor-save-format") as HTMLSelectElement).value;
+        if (downloadType === "json") {
+            let jsonchronos = Chronovisor.ChronoSet.Jsonify(chronos);
+            download("output.chronovis.json", JSON.stringify(jsonchronos));
+        } else if (downloadType === "csv") {
+            let csvchronos = Chronovisor.ChronoSet.Csvify(chronos, false);
+            download("output.chronovis.csv", csvchronos);
+        } else if (downloadType === "oldcsv") {
+            let oldchronos = Chronovisor.ChronoSet.Csvify(chronos, true);
+            download("output.old.chronovis.csv", oldchronos);
+        } else {
+            return chronos;
         }
     }
 
-    let downloadType = (document.getElementById("chronovisor-save-format") as HTMLSelectElement).value;
-    console.log("Download type set to", downloadType);
-    if (downloadType === "json") {
-        let jsonchronos = Chronovisor.Chrono.Jsonify(chronos);
-        download("output.chronovis.json", JSON.stringify(jsonchronos));
-    } else if (downloadType === "csv") {
-        let csvchronos = Chronovisor.Chrono.Csvify(chronos, false);
-        download("output.chronovis.csv", csvchronos);
-    } else if (downloadType === "oldcsv") {
-        let oldchronos = Chronovisor.Chrono.Csvify(chronos, true);
-        download("output.old.chronovis.csv", oldchronos);
-    }
-}
+    /**
+     * sets the map data being used when a map file is uploaded
+     * @param input file sent from <input>'s onchange callback
+     */
+    export function loadMap(input) {
+        let file: File = input.files[0];
+        if (!file) {
+            return;
+        }
 
-/**
- * sets the map data being used when a map file is uploaded
- * @param input file sent from <input>'s onchange callback
- */
-function loadMap(input) {
-    let file: File = input.files[0];
-    if (!file) {
-        return;
+        // Get fileIndex
+        let mapFields = document.getElementsByClassName("chronovisor-map-file");
+        let fileIndex = 0;
+        for (let i = 0; i < mapFields.length; i++) {
+            if (mapFields[i] === input) {
+                fileIndex = i;
+                console.debug("map index set to", i)
+                break;
+            }
+        }
+
+        // Setup reader
+        let reader = new FileReader();
+        reader.onerror = function () {
+            console.error("Failed to parse file");
+        }
+
+        reader.onload = function (ev) {
+            let contents = JSON.parse(ev.target.result.toString());
+            maps[fileIndex] = Chronovisor.Map.import(contents);
+            if (files[fileIndex]) maps[fileIndex].applyMapToDom(fileIndex);
+        }
+
+        reader.readAsText(file);
     }
 
-    // Get fileIndex
-    let mapFields = document.getElementsByClassName("chronovisor-map-file");
-    let fileIndex = 0;
-    for (let i = 0; i < mapFields.length; i++) {
-        if (mapFields[i] === input) {
-            fileIndex = i;
-            console.debug("map index set to", i)
-            break;
+    /**
+     * Adds another UI set for parsing files
+     */
+    export function addFile() {
+        document.getElementById("chronovisor-converter-container").appendChild(fileTemplate.cloneNode(true));
+        maps.push(null);
+        files.push(null);
+        data.push(null);
+        og_data.push(null);
+    }
+
+    export function readMetaFile(ev) {
+        ev.preventDefault();
+
+        let file;
+
+        if (ev.dataTransfer.items) {
+            if (ev.dataTransfer.items[0].kind === 'file') {
+                file = ev.dataTransfer.items[0].getAsFile();
+            }
+        } else {
+            file = ev.dataTransfer.files[0]
+        }
+
+        let reader = new FileReader();
+        reader.onerror = function () {
+            console.error("Failed to parse file");
+        }
+
+        reader.onload = function (ev) {
+            let contents = JSON.parse(ev.target.result.toString());
+            let keys = Object.keys(contents).filter(k => k.search(/(start|begin|time|end|stop)/i) >= 0);
+            let property = window.prompt(JSON.stringify(contents, null, 4), keys[0]? keys[0] : "startTimePropertyName");
+            (document.getElementById("chronovisor-time-offset") as HTMLInputElement).value = contents[property];
+
+            autoSetFormat({target: document.getElementById("chronovisor-time-offset")}, "chronovisor-time-offset-format");
+        }
+
+        reader.readAsText(file);
+    }
+
+    export function allowDrop(ev) {
+        ev.preventDefault();
+    }
+
+    export function autoSetFormat(ev, id) {
+        // Try to automatically determine format
+        if (ev.target.value > new Date().valueOf() * 100) {
+            // Assume C#
+            (document.getElementById(id) as HTMLSelectElement).value = "C";
+        }
+        else if (ev.target.value < new Date().valueOf() / 100) {
+            // Assume pythonic
+            (document.getElementById(id) as HTMLSelectElement).value = "pythonic";
+        }
+        else {
+            // TODO: set to javascript
         }
     }
 
-    // Setup reader
-    let reader = new FileReader();
-    reader.onerror = function () {
-        console.error("Failed to parse file");
+    /**
+     * downloads a text based file.
+     * @param filename name of the file to download
+     * @param text the file contents as a string
+     */
+    export function download(filename, text) {
+        let elm = document.createElement('a');
+        elm.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+        elm.setAttribute("download", filename);
+        elm.style.display = 'none';
+        document.body.appendChild(elm);
+        elm.click();
+        document.body.removeChild(elm);
     }
 
-    reader.onload = function (ev) {
-        let contents = JSON.parse(ev.target.result.toString());
-        maps[fileIndex] = Chronovisor.Map.import(contents);
-        if (files[fileIndex]) maps[fileIndex].applyMapToDom(fileIndex);
+    /**
+     * Generates a unique identifier
+     */
+    export function getUuid(): string {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0,
+                v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
     }
-
-    reader.readAsText(file);
-}
-
-/**
- * Adds another UI set for parsing files
- */
-function addFile() {
-    console.log("Adding File options");
-    document.getElementById("chronovisor-converter-container").appendChild(fileTemplate.cloneNode(true));
-    maps.push(null);
-    files.push(null);
-    data.push(null);
-    og_data.push(null);
-}
-
-function readMetaFile(ev) {
-    ev.preventDefault();
-    console.log(ev);
-
-    let file;
-
-    if (ev.dataTransfer.items) {
-        if (ev.dataTransfer.items[0].kind === 'file') {
-            file = ev.dataTransfer.items[0].getAsFile();
-        }
-    } else {
-        file = ev.dataTransfer.files[0]
-    }
-    console.log(file.name, file);
-
-    let reader = new FileReader();
-    reader.onerror = function () {
-        console.error("Failed to parse file");
-    }
-
-    reader.onload = function (ev) {
-        let contents = JSON.parse(ev.target.result.toString());
-        let property = window.prompt(JSON.stringify(contents, null, 4), "startTimePropertyName");
-        (document.getElementById("chronovisor-time-offset") as HTMLInputElement).value = contents[property];
-    }
-
-    reader.readAsText(file);
-}
-
-function allowDrop(ev) {
-    ev.preventDefault();
-}
-
-/**
- * downloads a text based file.
- * @param filename name of the file to download
- * @param text the file contents as a string
- */
-function download(filename, text) {
-    let elm = document.createElement('a');
-    elm.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-    elm.setAttribute("download", filename);
-    elm.style.display = 'none';
-    document.body.appendChild(elm);
-    elm.click();
-    document.body.removeChild(elm);
-}
-
-/**
- * Generates a unique identifier
- */
-function getUuid(): string {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        var r = Math.random() * 16 | 0,
-            v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
 }
