@@ -36,49 +36,85 @@ namespace Chronovisor {
     enum flags {
         IS_SAME_AS,
     }
+    enum downloadType {
+        JSON=0, CSV, CSV_old
+    }
 
     export class ChronoSet {
         private chronos: Chrono[];
+        private chronos_backup: Chrono[]; // should never be change other than in constructor
+        public get Chronos() {
+            return this.chronos;
+        }
+        public static sets: ChronoSet[] = []
+
+        constructor(chronos: Chrono[]) {
+            this.chronos = chronos;
+            this.chronos_backup = chronos;
+            ChronoSet.sets.push(this);
+        }
+
+        public static GetChronosFromDom(fileIndex: number | number[]) {
+            if (typeof(fileIndex) === "number"){
+                fileIndex = [fileIndex];
+            }
+            let fileIndecies = fileIndex as number[];
+
+            let chronos: Chrono[] = [];
+            for (let i of fileIndecies) {
+                if (maps[i] === null) {
+                    maps[i] = Chronovisor.Map.getMapFromDOM(i);
+                }
+
+                if (files[i].indexOf(".csv") !== -1) {
+                    chronos = chronos.concat(maps[i].convertCsv(data[i]));
+                } else {
+                    chronos = chronos.concat(maps[i].convertJson(data[i]));
+                }
+            }
+
+            return new ChronoSet(chronos);
+        }
         
-        public static Jsonify(chronos: Chrono[]): object {
+        public Jsonify(): object {
             let json = {};
             let keys = {};
 
-            for (let i = 0; i < chronos.length; i++) {
+            for (let i = 0; i < this.chronos.length; i++) {
                 let key;
-                if (chronos[i].key) {
+                if (this.chronos[i].key) {
                     // check if in keys
-                    if (chronos[i].key in keys) {
-                        keys[chronos[i].key] += 1;
+                    if (this.chronos[i].key in keys) {
+                        keys[this.chronos[i].key] += 1;
                     } else {
-                        keys[chronos[i].key] = 0;
+                        keys[this.chronos[i].key] = 0;
                     }
-                    key = keys[chronos[i].key].toString() + chronos[i].key
+                    key = keys[this.chronos[i].key].toString() + this.chronos[i].key
                 } else {
                     key = getUuid();
                 }
 
-                chronos[i].key = key;
-                json[key] = chronos[i].toJson();
+                this.chronos[i].key = key;
+                json[key] = this.chronos[i].toJson();
             }
 
             return json;
         }
 
-        public static Csvify(chronos: Chrono[], useOldFormat: boolean = false): string {
+        public Csvify(useOldFormat: boolean = false): string {
             let csv;
 
             if (useOldFormat) {
                 // Set headers
                 csv = ["StartTime,EndTime,Title,Annotation,MainCategory,Category2,Category3"];
                 // Get data
-                for (let i = 0; i < chronos.length; i++) {
-                    csv.push(chronos[i].toOldCsv());
+                for (let i = 0; i < this.chronos.length; i++) {
+                    csv.push(this.chronos[i].toOldCsv());
                 }
             } else {
                 csv = ["Title,Description,Start(HMS),Start(sec),End(HMS),End(sec),Duration(sec),PrimaryTag,Tags"];
-                for (let i = 0; i < chronos.length; i++) {
-                    csv.push(chronos[i].toCsv());
+                for (let i = 0; i < this.chronos.length; i++) {
+                    csv.push(this.chronos[i].toCsv());
                 }
             }
 
@@ -91,9 +127,9 @@ namespace Chronovisor {
          * @param chronos The Chrono objects to find pairs in
          * @param startKey the identifiers to use to find the start element eg: {"type": "speech starts", "description": "person A"}
          * @param endKey the identifiers to use to find the end element. Use the Chronovisor.flags.IS_SAME_AS flag to match with the startKey eg: {"type": "speech stops", "description": flags.IS_SAME_AS}
-         * @returns full chronos array with individual start's and end's replaced by consolidated pairs.
+         * @returns the combined pairs
          */
-        public static FindSuccessivePairs(chronos: Chrono[], startKey: {}, endKey: {}, returnAll:boolean=false) : Chrono[] {
+        public FindSuccessivePairs(startKey: {}, endKey: {}) : Chrono[] {
 
             function getIndecies(A: any[], B: any[]): number[] {
                 return A.map(a => {
@@ -108,30 +144,30 @@ namespace Chronovisor {
             let indeciesToPop: number[] = [];
 
             // Get all elements matching the start keys
-            let starts: Chrono[] = chronos;
+            let starts: Chrono[] = this.chronos;
             for (let key in startKey) {
                 starts = starts.filter(c => c[key] === startKey[key])
             }
-            indeciesToPop = getIndecies(starts, chronos);
+            indeciesToPop = getIndecies(starts, this.chronos);
 
             // Get all elements matching the end keys
-            let ends: Chrono[] = chronos;
+            let ends: Chrono[] = this.chronos;
             for (let key in endKey) {
                 let value = endKey[key] === flags.IS_SAME_AS? startKey[key] : endKey[key];
                 ends = ends.filter(c => c[key] === value);
             }
-            indeciesToPop = indeciesToPop.concat(getIndecies(ends, chronos));
+            indeciesToPop = indeciesToPop.concat(getIndecies(ends, this.chronos));
 
             // Form pairs
             let pairs = starts;
             for (let start of pairs) {
-                let index = chronos.indexOf(start);
+                let index = this.chronos.indexOf(start);
 
                 // Make sure the end comes after the start
                 let end;
                 let i=0
                 for (; i<ends.length; i++) {
-                    if (i === 0 || chronos.indexOf(end) <= index) {
+                    if (i === 0 || this.chronos.indexOf(end) <= index) {
                         end = ends[i];
                     }
                     else {
@@ -153,16 +189,41 @@ namespace Chronovisor {
             }
 
             // remove starts and ends from chronos
+            console.log("removing", indeciesToPop.length, "elements from chronos's", this.chronos.length, "elements.");
             indeciesToPop = indeciesToPop.sort((a, b) => b-a);
             for (let i of indeciesToPop) {
-                chronos.splice(i, 1);
+                this.chronos.splice(i, 1);
             }
 
+            // Add pairs to chronos
+            this.chronos = this.chronos.concat(pairs);
+
             // Return results
-            if (returnAll)
-                return chronos.concat(pairs);
-            else
-                return pairs;
+            return pairs;
+        }
+
+        public download(type: downloadType) {
+            switch (type) {
+                case downloadType.JSON:
+                    ChronoSet.downloadText("output.chronovis.json", JSON.stringify(this.Jsonify()));
+                    break;
+                case downloadType.CSV:
+                    ChronoSet.downloadText("output.chronovis.csv", this.Csvify());
+                    break;
+                case downloadType.CSV_old:
+                    ChronoSet.downloadText("output.chonovis-old.csv", this.Csvify(true));
+                    break;
+            }
+        }
+
+        public static downloadText (filename: string, data: string) {
+            let elm = document.createElement('a');
+            elm.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(data));
+            elm.setAttribute("download", filename);
+            elm.style.display = 'none';
+            document.body.appendChild(elm);
+            elm.click();
+            document.body.removeChild(elm);
         }
     }
 
@@ -425,6 +486,17 @@ namespace Chronovisor {
 
         public
         export () {
+
+            function downloadAsTextFile(filename, text) {
+                let elm = document.createElement('a');
+                elm.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+                elm.setAttribute("download", filename);
+                elm.style.display = 'none';
+                document.body.appendChild(elm);
+                elm.click();
+                document.body.removeChild(elm);
+            }
+
             if (this.mapName === null) {
                 this.mapName = window.prompt("Give this mapping a name", "myMap");
             }
@@ -441,7 +513,7 @@ namespace Chronovisor {
                 timestampFormat: this.timestampFormat,
                 sep: this.sep
             }
-            download(this.mapName + ".json", JSON.stringify(json));
+            downloadAsTextFile(this.mapName + ".json", JSON.stringify(json));
         }
 
         public static import(json: object): Map {
@@ -837,23 +909,39 @@ namespace Chronovisor {
      * And an input element that allows for a particular property value to be selected
      * @param row the table row to add the selection element and input element
      */
-    export function PostProcessing_CreateFilterRow(row: HTMLTableRowElement) {
+    export function PostProcessing_CreateFilterRow(row: HTMLTableRowElement, addRename=false, property: string=null, value: string = null) {
         row.innerHTML = "";
 
         row.insertCell(0);
         row.cells[0].appendChild(PostProcessing_createSelection())
+        if (property) 
+            row.cells[0].getElementsByTagName("select")[0].value = property;
 
         row.insertCell(1);
         let input = document.createElement("input");
         input.type = "text";
-        input.value = "filter value";
+        input.value = value?value:"filter value";
+        let label = document.createElement("label");
+        label.innerHTML = "value";
+        row.cells[1].appendChild(label);
         row.cells[1].appendChild(input);
 
-        row.insertCell(2);
+        if (addRename) {
+            row.insertCell(2);
+            let rename = document.createElement("input");
+            rename.type = "text";
+            rename.value = input.value;
+            let renameLabel = document.createElement("label");
+            renameLabel.innerHTML = "rename to";
+            row.cells[2].appendChild(renameLabel);
+            row.cells[2].appendChild(rename);
+        }
+
+        row.insertCell(addRename?3:2);
         let rm = document.createElement("button");
         rm.innerHTML = "-";
         rm.onclick = PostProcessing_RemoveFilter;
-        row.cells[2].appendChild(rm);
+        row.cells[addRename?3:2].appendChild(rm);
     }
 
     export function PostProcessing_AddAddFilterButton(row: HTMLTableRowElement) {
@@ -868,8 +956,18 @@ namespace Chronovisor {
     export function PostProcessing_AddFilterRow(ev) {
         let rowIndex = (ev.target.parentElement.parentElement as HTMLTableRowElement).rowIndex;
         let table = ev.target.parentElement.parentElement.parentElement.parentElement as HTMLTableElement;
+        
+        // Clean table
+        for (let i=table.rows.length-1; i>=0; i--) {
+            if (table.rows[i].innerHTML === "")
+                table.deleteRow(i);
+        }
+
         // Add row
-        PostProcessing_CreateFilterRow(table.rows[rowIndex]);
+        let rename = false;
+        if (table.classList.contains("chronovisor-post-start") && rowIndex===0) 
+            rename = true;
+        PostProcessing_CreateFilterRow(table.rows[rowIndex], rename);
 
         // Add button for adding more
         PostProcessing_AddAddFilterButton(table.insertRow(-1))
@@ -881,7 +979,7 @@ namespace Chronovisor {
         table.deleteRow(rowIndex);
     }
 
-    export function PostProcessing_Process() {
+    export function PostProcessing_Process(): ChronoSet {
 
         // Get data from HTML
         let pairs = [];
@@ -905,17 +1003,22 @@ namespace Chronovisor {
 
             pairs.push({
                 "start": startFilter,
-                "end": endFilter
+                "end": endFilter,
+                "name": startTable.rows[0].getElementsByTagName("input")[1].value
             })
         }
 
 
         // Process data
-        let chronos = convert("postProcessing");
+        let chronoset = getChronoSet();
+        let table = document.getElementById("chronovisor-post-display") as HTMLTableElement;
+        table.rows[0].innerHTML = "";
         for (let pair of pairs) {
-            chronos = ChronoSet.FindSuccessivePairs(chronos, pair.start, pair.end, true);
+            let paired = chronoset.FindSuccessivePairs(pair.start, pair.end);
+            table.rows[0].insertCell(-1).innerHTML = `<div><pre>${JSON.stringify(paired, null, 4)}</pre></div>`
         }
-        console.debug(chronos);
+        console.log("[Process] After pairing, chronoset has", chronoset.Chronos.length, "chronos");
+        return chronoset;
     }
 
     export function PostProcessing_CreatePair() {
@@ -936,7 +1039,7 @@ namespace Chronovisor {
         start.createTHead().innerHTML = "<h3>Start elements match pattern</h3>";
         start.createTBody();
         start.insertRow(0);
-        PostProcessing_CreateFilterRow(start.insertRow(0));
+        PostProcessing_CreateFilterRow(start.insertRow(0), true);
         PostProcessing_AddAddFilterButton(start.insertRow(1));
         // end
         end.classList.add("chronovisor-post-end");
@@ -974,7 +1077,7 @@ namespace Chronovisor {
     var data = [null];
     var og_data = [null];
     var files = [null];
-    var maps = [null];
+    var maps: Map[] = [null];
     var fileTemplate
     var timeOffset;
     var errors = [];
@@ -1065,40 +1168,19 @@ namespace Chronovisor {
     }
 
     /**
-     * Converts csv/json to chronovis json.
+     * Makes request to convert DOM into chronoset
      */
-    export function convert(downloadType:string =null) {
+    function getChronoSet(downloadType:string=null) : ChronoSet{
         // get time offset
         timeOffset = (document.getElementById("chronovisor-time-offset") as HTMLInputElement).value;
         let timeOffsetFormat = (document.getElementById("chronovisor-time-offset-format") as HTMLSelectElement).value;
         timeOffset = Chronovisor.Map.convertTimestamp(timeOffset, timeOffsetFormat);
 
-        let chronos = []
-        for (let i = 0; i < data.length; i++) {
-            if (maps[i] === null) {
-                maps[i] = Chronovisor.Map.getMapFromDOM(i);
-            }
-
-            if (files[i].indexOf(".csv") !== -1) {
-                chronos = chronos.concat(maps[i].convertCsv(data[i]));
-            } else {
-                chronos = chronos.concat(maps[i].convertJson(data[i]));
-            }
-        }
-
-        downloadType = downloadType? downloadType: (document.getElementById("chronovisor-save-format") as HTMLSelectElement).value;
-        if (downloadType === "json") {
-            let jsonchronos = Chronovisor.ChronoSet.Jsonify(chronos);
-            download("output.chronovis.json", JSON.stringify(jsonchronos));
-        } else if (downloadType === "csv") {
-            let csvchronos = Chronovisor.ChronoSet.Csvify(chronos, false);
-            download("output.chronovis.csv", csvchronos);
-        } else if (downloadType === "oldcsv") {
-            let oldchronos = Chronovisor.ChronoSet.Csvify(chronos, true);
-            download("output.old.chronovis.csv", oldchronos);
-        } else {
-            return chronos;
-        }
+        let indecies = [];
+        for (let i=0; i<data.length; i++)
+            indecies.push(i);
+        let chronoset = ChronoSet.GetChronosFromDom(indecies);
+        return chronoset;
     }
 
     /**
@@ -1197,29 +1279,38 @@ namespace Chronovisor {
         }
     }
 
-    /**
-     * downloads a text based file.
-     * @param filename name of the file to download
-     * @param text the file contents as a string
-     */
-    export function download(filename, text) {
-        let elm = document.createElement('a');
-        elm.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-        elm.setAttribute("download", filename);
-        elm.style.display = 'none';
-        document.body.appendChild(elm);
-        elm.click();
-        document.body.removeChild(elm);
-    }
 
     /**
      * Generates a unique identifier
      */
-    export function getUuid(): string {
+    function getUuid(): string {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
             var r = Math.random() * 16 | 0,
                 v = c == 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
+    }
+
+    export function showPostProcessingInfo() {
+        window.alert(
+`====================
+Post Processing
+====================
+This section allows you to select elements from your converted data and combine them.
+
+This is useful if you have 'start' and 'end' events that you would like to combine into single duration events.
+
+Use the properties set above to target these elements. Regex is not supported yet :'(`
+            );
+    }
+
+    /**
+     * Downloads processed and post processed data
+     */
+    export function download() {
+        let chronoset: ChronoSet = PostProcessing_Process();
+        console.log("[download] downloading", chronoset.Chronos, "chronos");
+        let downloadFormat: number = parseInt((document.getElementById("chronovisor-save-format") as HTMLSelectElement).value);
+        chronoset.download(downloadFormat as downloadType)
     }
 }

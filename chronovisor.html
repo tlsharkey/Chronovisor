@@ -14,6 +14,11 @@
     .chronovisor-post-pair table {
         border-style:solid;
     }
+    
+    table#chronovisor-post-display td div {
+        max-height: 25em;
+        overflow: scroll;
+    }
 </style>
 
 <body onload="Chronovisor.onLoad()">
@@ -25,11 +30,6 @@
             <option value="C">0001/01/01 00:00:00.000 (C#)</option>
         </select>
     </div>
-    <select id="chronovisor-save-format">
-        <option value="json">Download JSON format</option>
-        <option value="csv">Download CSV format</option>
-        <option value="oldcsv">Download old CSV format</option>
-    </select>
 
 
     <div id="chronovisor-converter-container">
@@ -39,7 +39,7 @@
             <input type="file" class="chronovisor-input-file" onchange="Chronovisor.onImport(this)" accept=".csv,.json"></input>
             <br>
             <label>Load existing map file: </label>
-            <input type="file" class="chronovisor-map-file" onchange="Chronovisor.loadMap(this)" accept=".json"></input>
+            <input type="file" class="chronovisor-map-file" onchange="Chronovisor.loadMap(this)" accept=".map.json"></input>
 
             <div class="chronovisor-csv-sep" style="visibility: hidden;">
                 <label>Split on </label><input type="text" value="," onchange="Chronovisor.updateSeparator(this)">
@@ -104,12 +104,12 @@
 
     <button onclick="Chronovisor.addFile()">Add Another File</button>
 
-    <button onclick="Chronovisor.convert()">Convert All</button>
 
 
     <div id="chronovisor-post">
-        <h1>Post Processing</h1>
-        <button onclick="document.getElementById('chronovisor-post-ui').style.display='block'; Chronovisor.PostProcessing_CreatePair();">Start</button>
+        <h1 style="display: inline-block;">Post Processing</h1>
+        <button onclick="document.getElementById('chronovisor-post-ui').style.display='block'; Chronovisor.PostProcessing_CreatePair();" style="display: inline-block; padding-left: 1 em;">Open</button>
+        <button style="display: inline-block; margin-left: 1em;" onclick="Chronovisor.showPostProcessingInfo()">?</button>
 
         <div id="chronovisor-post-ui" style="display: none;">
             <div id="chronovisor-post-pairings">
@@ -157,11 +157,26 @@
             </div>
              <button onclick="Chronovisor.PostProcessing_CreatePair();">Add another pair</button>
              <br>
-             <button onclick="Chronovisor.PostProcessing_Process()">Process</button>
+             <button onclick="Chronovisor.PostProcessing_Process()">Display Output</button>
+             <table id="chronovisor-post-display">
+                 <tbody>
+                    <tr>
+                        <!-- Sample output generated here -->
+                    </tr>
+                 </tbody>
+             </table>
         </div>
     </div>
 
 
+    <h1>Download</h1>
+    <button onclick="Chronovisor.download()">Work your magic! (download)</button>
+    
+    <select id="chronovisor-save-format">
+        <option value="0">JSON format</option>
+        <option value="1">CSV format</option>
+        <option value="2">old CSV format</option>
+    </select>
 </body>
 
 </html>
