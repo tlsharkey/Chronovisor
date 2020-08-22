@@ -67,12 +67,7 @@ var Chronovisor;
                 if (maps[i] === null) {
                     maps[i] = Chronovisor.Map.getMapFromDOM(i);
                 }
-                if (files[i].indexOf(".csv") !== -1) {
-                    chronos = chronos.concat(maps[i].convertCsv(data[i]));
-                }
-                else {
-                    chronos = chronos.concat(maps[i].convertJson(data[i]));
-                }
+                chronos = chronos.concat(maps[i].convert(data[i]));
             }
             return new ChronoSet(chronos);
         };
@@ -361,16 +356,54 @@ var Chronovisor;
             this.timestampFormat = timestampFormat;
             this.sep = sep;
         }
-        Map.prototype.convertCsv = function (data) {
+        /**
+         * Uses mapping to convert non-chronovis data into chronovis data.
+         * Converts both csv and json data
+         * @param data non-chronovis compatible data to parse
+         */
+        Map.prototype.convert = function (data) {
             var chronos = [];
-            var x = 0;
-            if (this.firstRow)
-                x = 1;
-            for (var i = x; i < data.length; i++) {
-                // separate out the csv cells
-                var row = data[i].split(this.sep);
-                // Parse
-                var c = new Chrono((this.type === null) ? null : row[this.type], (this.key === null) ? null : row[this.key], (this.title === null) ? null : row[this.title], (this.description === null) ? null : row[this.description], (this.start === null) ? null : Map.convertTimestamp(row[this.start], this.timestampFormat) - timeOffset, (this.end === null) ? null : Map.convertTimestamp(row[this.end], this.timestampFormat) - timeOffset, (this.tags === null) ? null : row[this.tags]);
+            // Parse through each line of the data to convert
+            for (var i = this.firstRow ? 1 : 0; i < data.length; i++) {
+                var properties = { "type": null, "key": null, "title": null, "description": null, "start": null, "end": null, "tags": null };
+                var datum = data[i];
+                if (typeof (datum) === "string") { // separate out the csv cells if needed
+                    datum = datum.split(this.sep);
+                }
+                // Loop through each property (type, title, description, ...) and extract its value from datum
+                propertyLoop: for (var _i = 0, _a = Object.keys(properties); _i < _a.length; _i++) {
+                    var property = _a[_i];
+                    // check if it's a Static property
+                    if (typeof (this[property]) === "string") {
+                        properties[property] = this[property];
+                    }
+                    // handle array of dynamic properties
+                    else if (typeof (this[property]) === "object") {
+                        for (var _b = 0, _c = this[property]; _b < _c.length; _b++) {
+                            var accessor = _c[_b];
+                            // Try to get the datum's value
+                            var value = void 0;
+                            if (typeof (accessor) === "object")
+                                value = Map.getNestedValue(datum, accessor);
+                            else
+                                value = datum[accessor];
+                            // assign value and continue if it exists
+                            if (value) {
+                                properties[property] = value;
+                                continue propertyLoop;
+                            }
+                        }
+                        // if none of the property's columns are populated
+                        properties[property] = null;
+                    }
+                    // if it was never assigned: null
+                    else {
+                        properties[property] = null;
+                    }
+                }
+                // Create Object
+                var c = new Chrono(properties.type, properties.key, properties.title, properties.description, Map.convertTimestamp(properties.start, this.timestampFormat) - timeOffset, Map.convertTimestamp(properties.end, this.timestampFormat) - timeOffset, //FIXME: outputting strange value. Perhaps is null?
+                properties.tags);
                 chronos.push(c);
             }
             return chronos;
@@ -406,21 +439,6 @@ var Chronovisor;
                 timestamp = timestamp - d.valueOf();
             }
             return timestamp;
-        };
-        Map.prototype.convertJson = function (data) {
-            // let chronos = [];
-            // console.error("Not Implemented");
-            // return chronos;
-            var chronos = [];
-            var x = 0;
-            if (this.firstRow)
-                x = 1;
-            for (var i = x; i < data.length; i++) {
-                // Parse
-                var c = new Chrono((this.type === null) ? null : Map.getNestedValue(data[i], this.type), (this.key === null) ? null : Map.getNestedValue(data[i], this.key), (this.title === null) ? null : Map.getNestedValue(data[i], this.title), (this.description === null) ? null : Map.getNestedValue(data[i], this.description), (this.start === null) ? null : Map.convertTimestamp(Map.getNestedValue(data[i], this.start), this.timestampFormat) - timeOffset, (this.end === null) ? null : Map.convertTimestamp(Map.getNestedValue(data[i], this.end), this.timestampFormat) - timeOffset, (this.tags === null) ? null : Map.getNestedValue(data[i], this.tags));
-                chronos.push(c);
-            }
-            return chronos;
         };
         Map.getNestedValue = function (data, keys) {
             if (typeof (keys) === "string")
@@ -460,7 +478,7 @@ var Chronovisor;
                 timestampFormat: this.timestampFormat,
                 sep: this.sep
             };
-            downloadAsTextFile(this.mapName + ".json", JSON.stringify(json));
+            downloadAsTextFile(this.mapName + ".cvrmap", JSON.stringify(json));
         };
         Map["import"] = function (json) {
             if (typeof (json) === "string") {
@@ -474,7 +492,10 @@ var Chronovisor;
                     document.getElementsByClassName("chronovisor-static-" + name)[fileIndex].value = item;
                 }
                 else {
-                    mapSelections[item].value = name;
+                    for (var _i = 0, item_1 = item; _i < item_1.length; _i++) {
+                        var i = item_1[_i];
+                        mapSelections[i].value = name;
+                    }
                 }
             }
         };
@@ -513,22 +534,29 @@ var Chronovisor;
             }
             // JSON
             else {
+                var r = 1;
                 for (var i = 0; i < keys.length; i++) {
-                    var row = table.rows[i + 1];
-                    // Set <select> element
-                    row.cells[0].getElementsByTagName("select")[0].value = keys[i];
-                    // Set selected properties
-                    var addProp = row.cells[1].getElementsByTagName("button")[0];
-                    if (items[keys[i]]) {
+                    if (items[keys[i]].length > 0) {
+                        // Set Static
                         if (typeof (items[keys[i]]) === "string" || keys[i] === "key") {
-                            // Set Static
                             document.getElementsByClassName("chronovisor-static-" + keys[i])[fileIndex].value = items[keys[i]];
                         }
+                        // Set Dynamic
                         else {
-                            // Set Dynamic
-                            for (var j = 0; j < items[keys[i]].length; j++) {
-                                addProp.click();
-                                row.cells[j + 2].getElementsByTagName("input")[0].value = items[keys[i]][j];
+                            for (var _i = 0, _a = items[keys[i]]; _i < _a.length; _i++) {
+                                var accessor = _a[_i];
+                                var row = table.rows[r];
+                                if (r === table.rows.length - 1) {
+                                    table.rows[r].getElementsByTagName("button")[0].click();
+                                }
+                                // Set dropdown element and add required input fields
+                                row.cells[0].getElementsByTagName("select")[0].value = keys[i];
+                                var addProp = row.cells[1].getElementsByTagName("button")[0];
+                                for (var j = 0; j < accessor.length; j++) {
+                                    addProp.click();
+                                    row.cells[j + 2].getElementsByTagName("input")[0].value = accessor[j];
+                                }
+                                r++;
                             }
                         }
                     }
@@ -556,7 +584,7 @@ var Chronovisor;
             }
             fileIndex = parseInt(fileIndex.toString());
             var table = document.getElementsByClassName("chronovisor-selector")[fileIndex].getElementsByTagName("table")[0];
-            var map = new Map(null, null, null, null, null, null, null, false, null);
+            var map = new Map([], [], [], [], [], [], [], false, null);
             // CSV parsing
             if (table.classList.contains("csv")) {
                 // Get mapping row
@@ -565,7 +593,7 @@ var Chronovisor;
                 for (var i = 0; i < mapSelections.length; i++) {
                     if (mapSelections[i].value === "ignore")
                         continue;
-                    map[mapSelections[i].value] = i;
+                    map[mapSelections[i].value].push(i);
                 }
             }
             // JSON parsing
@@ -581,10 +609,8 @@ var Chronovisor;
                                 accessors.push(cell.getElementsByTagName("input")[0].value);
                             }
                         }
-                        if (accessors.length === 0)
-                            map[mapto] = null;
-                        else
-                            map[mapto] = accessors;
+                        if (accessors.length !== 0)
+                            map[mapto].push(accessors);
                     }
                 }
             }
@@ -998,7 +1024,20 @@ var Chronovisor;
                 og_data[fileIndex] = data[fileIndex];
                 var separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex];
                 separatorContainer.style.visibility = "visible";
-                var separator = maps[fileIndex] ? maps[fileIndex].sep : separatorContainer.getElementsByTagName("input")[0].value;
+                var separator;
+                if (maps[fileIndex]) {
+                    separator = maps[fileIndex].sep;
+                }
+                else {
+                    var m = data[fileIndex][0].match(/(,|;|\t|   *|::)/);
+                    if (m) {
+                        separator = m[0];
+                        separatorContainer.getElementsByTagName("input")[0].value = m[0];
+                    }
+                    else {
+                        separator = separatorContainer.getElementsByTagName("input")[0].value;
+                    }
+                }
                 Chronovisor.CSV.displayCsv(data[fileIndex].slice(sampleDataSize[0], sampleDataSize[1]), fileIndex, separator);
                 if (maps[fileIndex]) {
                     maps[fileIndex].applyMapToDom(fileIndex);

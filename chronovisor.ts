@@ -66,11 +66,7 @@ namespace Chronovisor {
                     maps[i] = Chronovisor.Map.getMapFromDOM(i);
                 }
 
-                if (files[i].indexOf(".csv") !== -1) {
-                    chronos = chronos.concat(maps[i].convertCsv(data[i]));
-                } else {
-                    chronos = chronos.concat(maps[i].convertJson(data[i]));
-                }
+                chronos = chronos.concat(maps[i].convert(data[i]));
             }
 
             return new ChronoSet(chronos);
@@ -129,7 +125,7 @@ namespace Chronovisor {
          * @param endKey the identifiers to use to find the end element. Use the Chronovisor.flags.IS_SAME_AS flag to match with the startKey eg: {"type": "speech stops", "description": flags.IS_SAME_AS}
          * @returns the combined pairs
          */
-        public FindSuccessivePairs(startKey: {}, endKey: {}) : Chrono[] {
+        public FindSuccessivePairs(startKey: {}, endKey: {}) : Chrono[] { // FIXME: destroying data if any pairs exist
 
             function getIndecies(A: any[], B: any[]): number[] {
                 return A.map(a => {
@@ -384,25 +380,66 @@ namespace Chronovisor {
             this.sep = sep;
         }
 
-        public convertCsv(data: string[]): Chrono[] {
+        /**
+         * Uses mapping to convert non-chronovis data into chronovis data.
+         * Converts both csv and json data
+         * @param data non-chronovis compatible data to parse
+         */
+        public convert(data: string[]): Chrono[] {
             let chronos = [];
 
-            let x = 0;
-            if (this.firstRow) x = 1;
-            for (let i = x; i < data.length; i++) {
+            // Parse through each line of the data to convert
+            for (let i = this.firstRow? 1:0; i < data.length; i++) {
+                let properties = {"type":null, "key":null, "title":null, "description":null, "start":null, "end":null, "tags":null};
+                let datum : object|string|string[]= data[i];
 
-                // separate out the csv cells
-                let row = data[i].split(this.sep);
+                if (typeof(datum) === "string") { // separate out the csv cells if needed
+                    datum = datum.split(this.sep);
+                }
 
-                // Parse
+                // Loop through each property (type, title, description, ...) and extract its value from datum
+                propertyLoop:
+                for (let property of Object.keys(properties)) {
+                    // check if it's a Static property
+                    if (typeof(this[property]) === "string") {
+                        properties[property] = this[property];
+                    }
+
+                    // handle array of dynamic properties
+                    else if (typeof(this[property]) === "object") {
+                        for (let accessor of this[property]) {
+                            // Try to get the datum's value
+                            let value;
+                            if (typeof(accessor)==="object") 
+                                value = Map.getNestedValue(datum, accessor)   
+                            else
+                                value = datum[accessor]
+
+                            // assign value and continue if it exists
+                            if (value) {
+                                properties[property] = value;
+                                continue propertyLoop;
+                            }
+                        }
+                        // if none of the property's columns are populated
+                        properties[property] = null;
+                    }
+
+                    // if it was never assigned: null
+                    else {
+                        properties[property] = null;
+                    }
+                }
+
+                // Create Object
                 let c = new Chrono(
-                    (this.type === null) ? null : row[this.type],
-                    (this.key === null) ? null : row[this.key],
-                    (this.title === null) ? null : row[this.title],
-                    (this.description === null) ? null : row[this.description],
-                    (this.start === null) ? null : Map.convertTimestamp(row[this.start], this.timestampFormat) - timeOffset,
-                    (this.end === null) ? null : Map.convertTimestamp(row[this.end], this.timestampFormat) - timeOffset,
-                    (this.tags === null) ? null : row[this.tags]
+                    properties.type,
+                    properties.key,
+                    properties.title,
+                    properties.description,
+                    Map.convertTimestamp(properties.start, this.timestampFormat) - timeOffset,
+                    Map.convertTimestamp(properties.end, this.timestampFormat) - timeOffset, //FIXME: outputting strange value. Perhaps is null?
+                    properties.tags
                 )
 
                 chronos.push(c);
@@ -445,35 +482,6 @@ namespace Chronovisor {
             return timestamp;
         }
 
-        public convertJson(data: object[]): Chrono[] {
-            // let chronos = [];
-            // console.error("Not Implemented");
-            // return chronos;
-
-
-
-            let chronos = [];
-
-            let x = 0;
-            if (this.firstRow) x = 1;
-            for (let i = x; i < data.length; i++) {
-                // Parse
-                let c = new Chrono(
-                    (this.type === null) ? null : Map.getNestedValue(data[i], this.type),
-                    (this.key === null) ? null : Map.getNestedValue(data[i], this.key),
-                    (this.title === null) ? null : Map.getNestedValue(data[i], this.title),
-                    (this.description === null) ? null : Map.getNestedValue(data[i], this.description),
-                    (this.start === null) ? null : Map.convertTimestamp(Map.getNestedValue(data[i], this.start), this.timestampFormat) - timeOffset,
-                    (this.end === null) ? null : Map.convertTimestamp(Map.getNestedValue(data[i], this.end), this.timestampFormat) - timeOffset,
-                    (this.tags === null) ? null : Map.getNestedValue(data[i], this.tags)
-                )
-
-                chronos.push(c);
-            }
-
-            return chronos;
-        }
-
         private static getNestedValue(data: object, keys: string[] | string): string {
             if (typeof (keys) === "string") return keys;
             let ret = data;
@@ -484,8 +492,7 @@ namespace Chronovisor {
             else return null;
         }
 
-        public
-        export () {
+        public export() {
 
             function downloadAsTextFile(filename, text) {
                 let elm = document.createElement('a');
@@ -513,7 +520,7 @@ namespace Chronovisor {
                 timestampFormat: this.timestampFormat,
                 sep: this.sep
             }
-            downloadAsTextFile(this.mapName + ".json", JSON.stringify(json));
+            downloadAsTextFile(this.mapName + ".cvrmap", JSON.stringify(json));
         }
 
         public static import(json: object): Map {
@@ -541,7 +548,8 @@ namespace Chronovisor {
                 if (typeof (item) === "string") {
                     (document.getElementsByClassName("chronovisor-static-"+name)[fileIndex] as HTMLInputElement).value = item;
                 } else {
-                    mapSelections[item].value = name;
+                    for (let i of item)
+                        mapSelections[i].value = name;
                 }
             }
         }
@@ -586,22 +594,30 @@ namespace Chronovisor {
 
             // JSON
             else {
+                let r = 1;
                 for (let i=0; i<keys.length; i++) {
-                    let row = table.rows[i+1];
-                    // Set <select> element
-                    row.cells[0].getElementsByTagName("select")[0].value = keys[i];
-                    // Set selected properties
-                    let addProp = row.cells[1].getElementsByTagName("button")[0];
-                    if (items[keys[i]]) {
+                    if (items[keys[i]].length > 0) {
+                        // Set Static
                         if (typeof(items[keys[i]]) === "string" || keys[i] === "key") { 
-                            // Set Static
                             (document.getElementsByClassName("chronovisor-static-"+keys[i])[fileIndex] as HTMLInputElement).value = items[keys[i]];
                         }
-                        else { 
-                            // Set Dynamic
-                            for (let j=0; j<items[keys[i]].length; j++) {
-                                addProp.click();
-                                row.cells[j+2].getElementsByTagName("input")[0].value = items[keys[i]][j];
+
+                        // Set Dynamic
+                        else {
+                            for (let accessor of items[keys[i]]) {
+                                let row = table.rows[r];
+                                if (r === table.rows.length-1) {
+                                    table.rows[r].getElementsByTagName("button")[0].click();
+                                }
+                                // Set dropdown element and add required input fields
+                                row.cells[0].getElementsByTagName("select")[0].value = keys[i];
+                                let addProp = row.cells[1].getElementsByTagName("button")[0];
+
+                                for (let j=0; j<accessor.length; j++) {
+                                    addProp.click();
+                                    row.cells[j+2].getElementsByTagName("input")[0].value = accessor[j];
+                                }
+                                r++
                             }
                         }
                     }
@@ -631,7 +647,7 @@ namespace Chronovisor {
             }
             fileIndex = parseInt(fileIndex.toString());
             let table = document.getElementsByClassName("chronovisor-selector")[fileIndex].getElementsByTagName("table")[0];
-            let map = new Map(null, null, null, null, null, null, null, false, null);
+            let map = new Map([], [], [], [], [], [], [], false, null);
 
             // CSV parsing
             if (table.classList.contains("csv")) {
@@ -640,8 +656,7 @@ namespace Chronovisor {
                 let mapSelections = mappingRow.getElementsByTagName("select");
                 for (let i = 0; i < mapSelections.length; i++) {
                     if (mapSelections[i].value === "ignore") continue;
-
-                    map[mapSelections[i].value] = i;
+                    map[mapSelections[i].value].push(i);
                 }
             }
 
@@ -658,9 +673,7 @@ namespace Chronovisor {
                                 accessors.push(cell.getElementsByTagName("input")[0].value);
                             }
                         }
-                        if (accessors.length === 0) map[mapto] = null;
-                        else map[mapto] = accessors;
-
+                        if (accessors.length !== 0) map[mapto].push(accessors);
                     }
                 }
             }
@@ -1123,7 +1136,20 @@ namespace Chronovisor {
 
                 let separatorContainer = document.getElementsByClassName("chronovisor-csv-sep")[fileIndex] as HTMLInputElement
                 separatorContainer.style.visibility = "visible";
-                let separator = maps[fileIndex]? maps[fileIndex].sep : separatorContainer.getElementsByTagName("input")[0].value;
+                let separator;
+                if (maps[fileIndex]) {
+                    separator = maps[fileIndex].sep;
+                }
+                else {
+                    let m = data[fileIndex][0].match(/(,|;|\t|   *|::)/);
+                    if (m) {
+                        separator = m[0];
+                        separatorContainer.getElementsByTagName("input")[0].value = m[0];
+                    }
+                    else {
+                        separator = separatorContainer.getElementsByTagName("input")[0].value;
+                    }
+                }
                 Chronovisor.CSV.displayCsv(data[fileIndex].slice(sampleDataSize[0], sampleDataSize[1]), fileIndex, separator);
                 if (maps[fileIndex]) {
                     maps[fileIndex].applyMapToDom(fileIndex);
