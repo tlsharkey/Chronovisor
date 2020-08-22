@@ -49,13 +49,6 @@ var Chronovisor;
             this.chronos_backup = chronos;
             ChronoSet.sets.push(this);
         }
-        Object.defineProperty(ChronoSet.prototype, "Chronos", {
-            get: function () {
-                return this.chronos;
-            },
-            enumerable: false,
-            configurable: true
-        });
         ChronoSet.GetChronosFromDom = function (fileIndex) {
             if (typeof (fileIndex) === "number") {
                 fileIndex = [fileIndex];
@@ -213,6 +206,9 @@ var Chronovisor;
             elm.click();
             document.body.removeChild(elm);
         };
+        // public get Chronos() {
+        //     return this.chronos;
+        // }
         ChronoSet.sets = [];
         return ChronoSet;
     }());
@@ -400,8 +396,9 @@ var Chronovisor;
                         properties[property] = null;
                     }
                 }
+                console.log("Let's checking end", properties.end, "format", this.timestampFormat, "and offset", timeOffset, "\ncalculates to", Map.convertTimestamp(properties.end, this.timestampFormat) - timeOffset);
                 // Create Object
-                var c = new Chrono(properties.type, properties.key, properties.title, properties.description, Map.convertTimestamp(properties.start, this.timestampFormat) - timeOffset, Map.convertTimestamp(properties.end, this.timestampFormat) - timeOffset, //FIXME: outputting strange value. Perhaps is null?
+                var c = new Chrono(properties.type, properties.key, properties.title, properties.description, properties.start ? Map.convertTimestamp(properties.start, this.timestampFormat) - timeOffset : null, properties.end ? Map.convertTimestamp(properties.end, this.timestampFormat) - timeOffset : null, //FIXME: outputting strange value. Perhaps is null?
                 properties.tags);
                 chronos.push(c);
             }
@@ -934,7 +931,7 @@ var Chronovisor;
             var paired = chronoset.FindSuccessivePairs(pair.start, pair.end);
             table.rows[0].insertCell(-1).innerHTML = "<div><pre>" + JSON.stringify(paired, null, 4) + "</pre></div>";
         }
-        console.log("[Process] After pairing, chronoset has", chronoset.Chronos.length, "chronos");
+        //console.log("[Process] After pairing, chronoset has", chronoset.Chronos.length, "chronos");
         return chronoset;
     }
     Chronovisor.PostProcessing_Process = PostProcessing_Process;
@@ -1200,7 +1197,7 @@ var Chronovisor;
      */
     function download() {
         var chronoset = PostProcessing_Process();
-        console.log("[download] downloading", chronoset.Chronos, "chronos");
+        //console.log("[download] downloading", chronoset.Chronos, "chronos");
         var downloadFormat = parseInt(document.getElementById("chronovisor-save-format").value);
         chronoset.download(downloadFormat);
     }

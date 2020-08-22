@@ -43,9 +43,9 @@ namespace Chronovisor {
     export class ChronoSet {
         private chronos: Chrono[];
         private chronos_backup: Chrono[]; // should never be change other than in constructor
-        public get Chronos() {
-            return this.chronos;
-        }
+        // public get Chronos() {
+        //     return this.chronos;
+        // }
         public static sets: ChronoSet[] = []
 
         constructor(chronos: Chrono[]) {
@@ -430,14 +430,15 @@ namespace Chronovisor {
                     }
                 }
 
+                console.log("Let's checking end", properties.end, "format", this.timestampFormat, "and offset", timeOffset, "\ncalculates to", Map.convertTimestamp(properties.end, this.timestampFormat) - timeOffset);
                 // Create Object
                 let c = new Chrono(
                     properties.type,
                     properties.key,
                     properties.title,
                     properties.description,
-                    Map.convertTimestamp(properties.start, this.timestampFormat) - timeOffset,
-                    Map.convertTimestamp(properties.end, this.timestampFormat) - timeOffset, //FIXME: outputting strange value. Perhaps is null?
+                    properties.start? Map.convertTimestamp(properties.start, this.timestampFormat) - timeOffset : null,
+                    properties.end? Map.convertTimestamp(properties.end, this.timestampFormat) - timeOffset : null, //FIXME: outputting strange value. Perhaps is null?
                     properties.tags
                 )
 
@@ -1029,7 +1030,7 @@ namespace Chronovisor {
             let paired = chronoset.FindSuccessivePairs(pair.start, pair.end);
             table.rows[0].insertCell(-1).innerHTML = `<div><pre>${JSON.stringify(paired, null, 4)}</pre></div>`
         }
-        console.log("[Process] After pairing, chronoset has", chronoset.Chronos.length, "chronos");
+        //console.log("[Process] After pairing, chronoset has", chronoset.Chronos.length, "chronos");
         return chronoset;
     }
 
@@ -1334,7 +1335,7 @@ Use the properties set above to target these elements. Regex is not supported ye
      */
     export function download() {
         let chronoset: ChronoSet = PostProcessing_Process();
-        console.log("[download] downloading", chronoset.Chronos, "chronos");
+        //console.log("[download] downloading", chronoset.Chronos, "chronos");
         let downloadFormat: number = parseInt((document.getElementById("chronovisor-save-format") as HTMLSelectElement).value);
         chronoset.download(downloadFormat as downloadType)
     }
