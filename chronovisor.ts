@@ -125,7 +125,7 @@ namespace Chronovisor {
          * @param endKey the identifiers to use to find the end element. Use the Chronovisor.flags.IS_SAME_AS flag to match with the startKey eg: {"type": "speech stops", "description": flags.IS_SAME_AS}
          * @returns the combined pairs
          */
-        public FindSuccessivePairs(startKey: {}, endKey: {}) : Chrono[] { // FIXME: destroying data if any pairs exist
+        public FindSuccessivePairs(startKey: {}, endKey: {}) : Chrono[] {
 
             function getIndecies(A: any[], B: any[]): number[] {
                 return A.map(a => {
@@ -180,12 +180,11 @@ namespace Chronovisor {
                 start.description = start.description? start.description : end.description;
                 start.end = /*i === ends.length? null:*/ end.start;
                 start.duration = start.end - start.start;
-                start.tags = start.tags + end.tags; // combine tags
+                start.tags = start.tags && end.tags? start.tags + end.tags : start.tags? start.tags : end.tags; // combine tags
                 start.myPrimaryTagKey = start.myPrimaryTagKey? start.myPrimaryTagKey: end.myPrimaryTagKey;
             }
 
             // remove starts and ends from chronos
-            console.log("removing", indeciesToPop.length, "elements from chronos's", this.chronos.length, "elements.");
             indeciesToPop = indeciesToPop.sort((a, b) => b-a);
             for (let i of indeciesToPop) {
                 this.chronos.splice(i, 1);

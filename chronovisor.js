@@ -177,11 +177,10 @@ var Chronovisor;
                 start.description = start.description ? start.description : end.description;
                 start.end = /*i === ends.length? null:*/ end.start;
                 start.duration = start.end - start.start;
-                start.tags = start.tags + end.tags; // combine tags
+                start.tags = start.tags && end.tags ? start.tags + end.tags : start.tags ? start.tags : end.tags; // combine tags
                 start.myPrimaryTagKey = start.myPrimaryTagKey ? start.myPrimaryTagKey : end.myPrimaryTagKey;
             }
             // remove starts and ends from chronos
-            console.log("removing", indeciesToPop.length, "elements from chronos's", this.chronos.length, "elements.");
             indeciesToPop = indeciesToPop.sort(function (a, b) { return b - a; });
             for (var _a = 0, indeciesToPop_1 = indeciesToPop; _a < indeciesToPop_1.length; _a++) {
                 var i = indeciesToPop_1[_a];
